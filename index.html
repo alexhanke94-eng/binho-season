@@ -158,8 +158,11 @@
   .stepper div{display:flex;align-items:center;gap:12px}
   .stepper button{width:32px;height:32px;border:1px solid var(--line);border-radius:50%;font-family:var(--mono)}
   .stepper span{font-family:var(--mono);width:16px;text-align:center}
+  /* in-flow at the top of the shell so it pushes the header down instead of
+     covering it (and thus the Rules button) in either orientation */
+  .topbar{position:relative;z-index:10}
   .banner{
-    position:fixed;left:0;right:0;top:0;z-index:60;padding:10px 14px;
+    position:relative;z-index:70;padding:10px 14px;
     background:var(--red);color:#fff;font-family:var(--mono);font-size:.64rem;
     letter-spacing:.08em;text-align:center;line-height:1.5;
   }
@@ -243,17 +246,66 @@
   ul.rules li b{color:var(--yellow)}
   a.btn{text-decoration:none}
 
+  /* ---- landscape on short viewports: split the board into left | mid | right ---- */
+  @media (orientation:landscape) and (max-height:500px){
+    /* claw back vertical height; keep Rules reachable, drop the belt */
+    header{padding:5px calc(12px + env(safe-area-inset-right)) 5px calc(12px + env(safe-area-inset-left))}
+    .wordmark{font-size:1rem}
+    .belt{display:none}
+    nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+
+    /* away | mid | home; safe-area padding keeps the board off the notch */
+    .board{
+      grid-template-rows:1fr;
+      grid-template-columns:1fr auto 1fr;
+      padding-left:env(safe-area-inset-left);
+      padding-right:env(safe-area-inset-right);
+    }
+    /* both panels upright and identical — undo the portrait away overrides */
+    .side--away .side__in{flex-direction:column}
+    .side--away .side__tools,.side--home .side__tools{top:auto;bottom:0}
+
+    /* scale with the smaller (vertical) viewport dimension, never vw */
+    .pscore{font-size:clamp(2.2rem,15vmin,4.2rem)}
+    .pname{font-size:clamp(.66rem,3.2vmin,1rem);text-align:center}
+    .side__in .avatar--lg{
+      width:clamp(30px,9vmin,54px);height:clamp(30px,9vmin,54px);
+      font-size:clamp(.8rem,4vmin,1.4rem);margin-bottom:5px;
+    }
+
+    /* markers hug each panel's OUTER edge, clear of centred content and tools */
+    .side--away .marks{left:0;right:auto;align-items:flex-start;padding:0 0 0 8px}
+    .side--home .marks{left:auto;right:0;align-items:flex-end;padding:0 8px 0 0}
+
+    /* all five tools stay reachable: a compact wrapping row along the bottom */
+    .side__tools{padding:7px;gap:5px}
+    .tool{padding:5px 9px;font-size:.56rem}
+
+    /* the mid strip becomes the narrow vertical divider between the panels */
+    .mid{
+      grid-template-columns:1fr;grid-auto-rows:auto;
+      justify-items:center;align-content:center;gap:12px;padding:8px;
+      border-top:0;border-bottom:0;
+      border-left:1px solid var(--line);border-right:1px solid var(--line);
+    }
+    .clock{font-size:1.5rem}
+    .mid-btn.right{justify-self:center}
+  }
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 
 <div id="shell">
-  <header>
-    <div class="wordmark">Binho <span>Season</span></div>
-    <button class="rules-pill" id="rulesBtn">Rules</button>
-    <div class="belt" id="beltBox">Championship belt<b id="beltHolder">Vacant</b></div>
-  </header>
+  <div class="topbar">
+    <div class="banner" id="banner" style="display:none"></div>
+    <header>
+      <div class="wordmark">Binho <span>Season</span></div>
+      <button class="rules-pill" id="rulesBtn">Rules</button>
+      <div class="belt" id="beltBox">Championship belt<b id="beltHolder">Vacant</b></div>
+    </header>
+  </div>
 
   <main>
     <!-- BOARD -->
@@ -632,7 +684,6 @@
   <small id="countLbl">Hands off the board</small>
 </div>
 
-<div class="banner" id="banner" style="display:none"></div>
 <div class="toast" id="toast"></div>
 
 <script>
