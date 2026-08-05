@@ -501,7 +501,7 @@
           <div class="field"><label>Score limit (0 = clock only)</label><input type="number" id="cfgLimit" min="0" max="20"></div>
           <div class="field"><label>Sudden death at tie of</label><input type="number" id="cfgSd" min="0" max="20"></div>
         </div>
-        <div class="note">Sudden death starts the moment the score is level at the tie mark, or when regulation time runs out level at any score. From there the next goal wins, and the app pauses on every full minute to make both players remove a field peg.</div>
+        <div class="note">Sudden death starts the moment the score is level at the tie mark, or when regulation time runs out level at any score. From there play runs on to the score limit, and the app pauses on every full minute without a goal to make both players remove a field peg.</div>
 
         <h3>Kickoff countdown</h3>
         <div class="row">
@@ -624,7 +624,7 @@
   <div class="sheet">
     <div class="final">
       <div class="eyebrow" id="sdEyebrow">Sudden death</div>
-      <div class="who" id="sdTitle">Next goal wins</div>
+      <div class="who" id="sdTitle">First to 7 wins</div>
       <div class="note" id="sdBody"></div>
       <div class="actions">
         <button class="btn btn--go" id="sdGoBtn">Start sudden death</button>
@@ -1099,11 +1099,12 @@
     if(side === 'home') game.sh++; else game.sa++;
     var el = $(side === 'home' ? 'sideHome' : 'sideAway');
     el.classList.add('pop'); setTimeout(function(){ el.classList.remove('pop'); }, 220);
-    if(game.sd){ endGame(); return; }
     var limit = game.limit;
+    // sudden death is not golden goal: play runs on until a side reaches the limit
     if(limit > 0 && (game.sh >= limit || game.sa >= limit)){ endGame(); return; }
     // house rule: a tie at the sudden-death mark ends regulation on the spot
-    if(!game.std && game.sh === game.sa && game.sh >= league.cfg.sdScore){ enterSuddenDeath('score'); return; }
+    if(!game.std && !game.sd && game.sh === game.sa && game.sh >= league.cfg.sdScore){ enterSuddenDeath('score'); return; }
+    // a goal in sudden death does not touch the clock — the minute keeps running
     renderLive();
   }
 
@@ -1217,11 +1218,11 @@
     whistle(W_FULLTIME);
     say('Sudden death');
     showSD('Sudden death',
-      'Next goal wins',
+      'First to ' + game.limit + ' wins',
       (cause === 'score'
         ? 'Level at ' + game.sh + '–' + game.sa + '. '
         : 'Regulation is over and it is level at ' + game.sh + '–' + game.sa + '. ') +
-      'Every full minute without a goal, each player removes one of their own field pegs. Goalkeepers stay on the board.',
+      'Play runs on until a side reaches ' + game.limit + '. Every full minute without a goal, each player removes one of their own field pegs — goalkeepers stay on the board.',
       'Start sudden death');
     renderLive();
   }
@@ -1230,6 +1231,7 @@
     stopClock();
     game.running = false;
     game.sdMin++;
+    game.left = 0;   // the next minute counts fresh from 0:00 once play resumes
     whistle(W_MINUTE);
     say('Remove a player');
     showSD('Minute ' + game.sdMin,
@@ -1454,7 +1456,7 @@
     c.classList.toggle('sd', game.sd);
     $('clockSub').textContent = game.over ? 'Full time'
       : game.std ? 'First to ' + game.limit + ' · no clock'
-      : game.sd ? 'Sudden death · next goal wins' + (game.sdMin ? ' · ' + game.sdMin + ' pegs off each side' : '')
+      : game.sd ? 'Sudden death · first to ' + game.limit + (game.sdMin ? ' · ' + game.sdMin + ' pegs off each side' : '')
       : game.running ? 'Tap to pause' : (game.left === league.cfg.clockMin*60 ? 'Tap to start' : 'Tap to resume');
     var f = $('flag'), lead = Math.abs(game.sh - game.sa);
     if(lead >= 5 && !game.over && !game.std){
