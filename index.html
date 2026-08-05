@@ -1,0 +1,2073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Binho Season</title>
+<meta name="theme-color" content="#0C2418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<script src="config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --turf:#0C2418; --turf-2:#113322; --turf-3:#16412A;
+    --chalk:#EAF1E6; --dim:rgba(234,241,230,.52); --line:rgba(234,241,230,.18);
+    --home:#2FE0B0; --away:#7BA7FF;
+    --yellow:#F7C948; --red:#E4372E; --gold:#E8C26B;
+    --display:"Big Shoulders Display","Arial Narrow",sans-serif;
+    --body:"Space Grotesk",system-ui,-apple-system,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{background:var(--turf);color:var(--chalk);font-family:var(--body);overflow:hidden;overscroll-behavior:none}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{background:none;border:0;padding:0;cursor:pointer}
+  :focus-visible{outline:2px solid var(--chalk);outline-offset:2px;border-radius:4px}
+
+  #shell{height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
+
+  /* header */
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:12px 16px;border-bottom:1px solid var(--line);
+    background:linear-gradient(var(--turf-2),var(--turf));
+  }
+  .wordmark{font-family:var(--display);font-weight:800;font-size:1.25rem;letter-spacing:.2em;text-transform:uppercase}
+  .wordmark span{color:var(--home)}
+  .belt{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--gold);text-align:right;line-height:1.5}
+  .belt b{display:block;font-weight:600}
+
+  /* views */
+  main{overflow:auto;position:relative;-webkit-overflow-scrolling:touch}
+  .view{display:none;min-height:100%}
+  .view.on{display:block}
+  .pad{padding:18px 16px 28px}
+
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;letter-spacing:.14em;text-transform:uppercase;margin:0 0 4px}
+  .sub{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;color:var(--dim);margin-bottom:18px;line-height:1.6}
+  h3{font-family:var(--mono);font-weight:600;font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin:26px 0 10px}
+
+  .field{display:block;margin-bottom:12px}
+  .field label{display:block;font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  input[type=text],input[type=number],select,textarea{
+    width:100%;background:var(--turf-2);border:1px solid var(--line);border-radius:10px;
+    padding:12px 13px;font-size:.95rem;
+  }
+  textarea{font-family:var(--mono);font-size:.72rem;min-height:120px;resize:vertical}
+  select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    border:1px solid var(--line);border-radius:999px;padding:13px 18px;width:100%;
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+  }
+  .btn--go{background:var(--chalk);color:var(--turf);border-color:var(--chalk);font-weight:600}
+  .btn--ghost{color:var(--dim)}
+  .btn--danger{color:var(--red);border-color:rgba(228,55,46,.4)}
+  .btn:disabled{opacity:.35}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1}
+
+  /* board */
+  .pregame{padding:18px 16px}
+  .vs{font-family:var(--display);font-weight:800;font-size:1.1rem;letter-spacing:.2em;color:var(--dim);text-align:center;margin:6px 0}
+
+  .board{display:grid;grid-template-rows:1fr auto 1fr;height:100%}
+  .side{position:relative;overflow:hidden;background:repeating-linear-gradient(90deg,var(--turf) 0 42px,var(--turf-2) 42px 84px)}
+  .side--away{transform:rotate(180deg)}
+  .side__tap{position:absolute;inset:0;width:100%;height:100%}
+  .side__glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 100%,var(--accent) 0,transparent 62%);opacity:.10}
+  .side__in{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;pointer-events:none}
+  .side__in button{pointer-events:auto}
+  .pname{font-family:var(--display);font-weight:700;font-size:1.05rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  .pscore{font-family:var(--display);font-weight:800;font-size:clamp(4rem,20vw,7rem);line-height:.85;font-variant-numeric:tabular-nums;transition:transform .18s cubic-bezier(.2,1.4,.4,1)}
+  .side.pop .pscore{transform:scale(1.12)}
+  .side.pop .side__glow{opacity:.3;transition:opacity .35s}
+  .marks{display:flex;gap:5px;align-items:center;min-height:22px;margin-top:6px}
+  .card{width:13px;height:18px;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .card--y{background:var(--yellow)} .card--r{background:var(--red)}
+  .card--t{background:var(--chalk);width:13px;height:13px;border-radius:50%}
+  .pend{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);margin-left:3px}
+  .side__tools{position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:10px}
+  .tool{border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;color:var(--dim);background:rgba(0,0,0,.2)}
+  .tool--y{color:var(--yellow)} .tool--r{color:var(--red)}
+  .tool--og{color:var(--away)}
+  .og-mark{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-left:3px}
+  .down-mark{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--red);margin-left:3px}
+
+  .mid{
+    position:relative;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:linear-gradient(var(--turf-2),var(--turf));padding:10px 14px;
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;
+  }
+  .clock{font-family:var(--display);font-weight:800;font-size:2.1rem;letter-spacing:.04em;font-variant-numeric:tabular-nums;text-align:center;line-height:1}
+  .clock.sd{color:var(--red)}
+  .mid-btn{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:8px 11px}
+  .mid-btn.right{justify-self:end}
+  .flag{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:-1px;
+    font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--red);white-space:nowrap;background:var(--turf);padding:0 8px;
+  }
+  .clock-sub{font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;color:var(--dim);text-align:center;margin-top:3px}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.74rem}
+  th{font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600;text-align:right;padding:0 0 8px}
+  th:first-child{text-align:left}
+  td{padding:10px 0;border-top:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+  td:first-child{text-align:left;font-family:var(--body);font-size:.85rem}
+  .rank{color:var(--dim);margin-right:8px;font-family:var(--mono);font-size:.7rem}
+  .warn{color:var(--yellow);font-size:.58rem;display:block;letter-spacing:.08em}
+  .warn.up{color:var(--home)} .warn.down{color:var(--dim)}
+  .bar{height:4px;border-radius:999px;background:var(--turf-3);overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--home);border-radius:999px;transition:width .4s ease}
+  .gp-short{color:var(--dim)}
+  .gp-done{color:var(--home)}
+
+  .log-item{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-family:var(--mono);font-size:.74rem;align-items:center}
+  .log-item .who{font-family:var(--body);font-size:.86rem}
+  .log-item .tags{font-size:.56rem;letter-spacing:.1em;color:var(--dim);margin-top:3px}
+  .log-x{color:var(--dim);padding:6px 8px;font-size:.9rem}
+  .empty{font-family:var(--mono);font-size:.72rem;color:var(--dim);line-height:1.7;padding:16px 0}
+
+  /* tab bar */
+  nav{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--turf-2)}
+  nav button{padding:13px 2px calc(13px + env(safe-area-inset-bottom));font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  nav button.on{color:var(--chalk);box-shadow:inset 0 2px 0 var(--home)}
+
+  /* modal */
+  .veil{position:fixed;inset:0;z-index:30;background:rgba(6,18,12,.92);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:16px}
+  .veil.open{display:flex}
+  .sheet{width:100%;max-width:430px;max-height:88dvh;overflow:auto;background:var(--turf-2);border:1px solid var(--line);border-radius:18px;padding:20px}
+  .final-line{font-family:var(--display);font-weight:800;font-size:2.2rem;letter-spacing:.02em;text-align:center;margin:2px 0 4px;font-variant-numeric:tabular-nums}
+  .final-who{font-family:var(--mono);font-size:.64rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);text-align:center}
+  .check{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);font-size:.86rem}
+  .check input{width:20px;height:20px;flex:0 0 auto;accent-color:var(--home)}
+  .stepper{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);font-size:.86rem}
+  .stepper div{display:flex;align-items:center;gap:12px}
+  .stepper button{width:32px;height:32px;border:1px solid var(--line);border-radius:50%;font-family:var(--mono)}
+  .stepper span{font-family:var(--mono);width:16px;text-align:center}
+  .banner{
+    position:fixed;left:0;right:0;top:0;z-index:60;padding:10px 14px;
+    background:var(--red);color:#fff;font-family:var(--mono);font-size:.64rem;
+    letter-spacing:.08em;text-align:center;line-height:1.5;
+  }
+  .toast{
+    position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:40;
+    background:var(--chalk);color:var(--turf);border-radius:999px;padding:10px 18px;
+    font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+    opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;
+  }
+  .toast.on{opacity:1}
+  .note{font-family:var(--mono);font-size:.62rem;color:var(--dim);line-height:1.7;margin-top:8px}
+  .chiprow{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-family:var(--mono);font-size:.64rem;color:var(--dim)}
+  .chip .x{color:var(--red);margin-left:7px}
+  /* kickoff countdown */
+  .count{position:fixed;inset:0;z-index:50;background:rgba(6,18,12,.96);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+  .count.open{display:flex}
+  .count b{
+    font-family:var(--display);font-weight:800;font-size:min(46vw,17rem);line-height:.78;
+    font-variant-numeric:tabular-nums;animation:tickIn .3s cubic-bezier(.2,1.3,.4,1);
+  }
+  .count.go b{color:var(--home);font-size:min(24vw,8rem);letter-spacing:.06em}
+  .count small{font-family:var(--mono);font-size:.66rem;letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+  @keyframes tickIn{from{transform:scale(.72);opacity:.15}to{transform:scale(1);opacity:1}}
+
+  .avatar{
+    width:38px;height:38px;border-radius:50%;flex:0 0 auto;overflow:hidden;
+    background:var(--turf-3);background-size:cover;background-position:center;
+    display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;
+    font-family:var(--display);font-weight:700;font-size:.95rem;color:var(--dim);
+    border:1px solid var(--line);
+  }
+  .avatar--lg{width:60px;height:60px;font-size:1.4rem;margin-bottom:8px;border-color:var(--accent)}
+  .avatar--sm{width:24px;height:24px;font-size:.66rem;margin-right:8px}
+  .matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:10px;margin:4px 0 18px}
+  .mu-side{display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center}
+  .mu-side .avatar{width:56px;height:56px;font-size:1.3rem}
+  .mu-label{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);line-height:1.5}
+  .mu-label b{display:block;font-family:var(--display);font-size:1rem;letter-spacing:.1em;color:var(--chalk)}
+  .statgrid{display:grid;grid-template-columns:1fr 68px 68px;gap:7px;align-items:center;margin-top:6px}
+  .statgrid .sg-head{
+    font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+    text-align:center;padding-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .statgrid label{font-size:.84rem;color:var(--chalk)}
+  .statgrid input{padding:9px;text-align:center;font-size:.9rem}
+  .roster-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .roster-row .rname{flex:1;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .roster-row button{
+    border:1px solid var(--line);border-radius:999px;padding:6px 10px;
+    font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+  }
+  .roster-row .member.on{color:var(--home);border-color:rgba(47,224,176,.45)}
+  .roster-row .x{color:var(--red);border-color:rgba(228,55,46,.35);padding:6px 10px}
+  .roster-row button:disabled{opacity:.35}
+  .recovery{
+    margin-top:12px;padding:14px;border:1px solid var(--gold);border-radius:12px;background:rgba(232,194,107,.07);
+  }
+  .recovery b{
+    display:block;font-family:var(--mono);font-size:1.05rem;letter-spacing:.16em;color:var(--gold);
+    margin:8px 0;word-break:break-all;
+  }
+  .recovery span{font-family:var(--mono);font-size:.62rem;line-height:1.7;color:var(--dim)}
+  .rules-pill{
+    border:1px solid var(--line);border-radius:999px;padding:7px 14px;
+    font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+    flex:0 0 auto;
+  }
+  .rules-pill:active{color:var(--chalk);background:rgba(0,0,0,.25)}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;border:1px solid var(--line);border-radius:999px;margin-bottom:18px}
+  .seg button{
+    border-radius:999px;padding:11px 8px;
+    font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+  }
+  .seg button.on{background:var(--chalk);color:var(--turf);font-weight:600}
+  ul.rules{list-style:none;margin:0;padding:0}
+  ul.rules li{
+    position:relative;padding:0 0 11px 16px;font-size:.85rem;line-height:1.55;color:var(--chalk);
+  }
+  ul.rules li:before{content:'';position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;background:var(--home)}
+  ul.rules li b{color:var(--yellow)}
+  a.btn{text-decoration:none}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div id="shell">
+  <header>
+    <div class="wordmark">Binho <span>Season</span></div>
+    <button class="rules-pill" id="rulesBtn">Rules</button>
+    <div class="belt" id="beltBox">Championship belt<b id="beltHolder">Vacant</b></div>
+  </header>
+
+  <main>
+    <!-- BOARD -->
+    <section class="view on" id="v-board">
+      <div class="pregame" id="pregame">
+        <h2>New match</h2>
+        <div class="sub" id="pregameSub">Pick both players and declare selections before the opening flick.</div>
+        <div class="seg" id="typeSeg">
+          <button class="on" data-type="league">League match</button>
+          <button data-type="standard">Standard Binho</button>
+        </div>
+        <div class="field"><label>Home side</label><select id="selHome"></select></div>
+        <div class="field"><label>Away side</label><select id="selAway"></select></div>
+        <div class="matchup">
+          <div class="mu-side"><div id="avHome"></div><div class="mu-label">Home<b id="muHome">—</b></div></div>
+          <div class="vs">vs</div>
+          <div class="mu-side"><div id="avAway"></div><div class="mu-label">Away<b id="muAway">—</b></div></div>
+        </div>
+        <div id="declBlock">
+        <h3 id="declHead">Pregame declarations — required</h3>
+        <div class="row">
+          <div class="field"><label id="lblPuHome">Home power up</label><select id="puHome"></select></div>
+          <div class="field"><label id="lblEcHome">Home event card</label><select id="ecHome"></select></div>
+        </div>
+        <div class="row">
+          <div class="field"><label id="lblPuAway">Away power up</label><select id="puAway"></select></div>
+          <div class="field"><label id="lblEcAway">Away event card</label><select id="ecAway"></select></div>
+        </div>
+        </div>
+        <div id="leagueExtra">
+        <div class="field"><label>Mode</label><select id="selMode"></select></div>
+        <div class="check"><input type="checkbox" id="selBelt"><label for="selBelt" style="margin:0;text-transform:none;letter-spacing:0;font-family:var(--body);font-size:.86rem;color:var(--chalk)">Belt match — winner takes the belt</label></div>
+        </div>
+        <div id="stdOnly" style="display:none">
+          <h3>Standard Binho</h3>
+          <div class="note">Official Binho rules — first to 7 goals, no clock. Recorded in its own all-time stats, never counted in league standings, and never cleared when a season ends.</div>
+          <div class="check"><input type="checkbox" id="stdDecl"><label for="stdDecl" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Play with power ups and event cards</label></div>
+        </div>
+        <button class="btn btn--go" id="startBtn" style="margin-top:20px">Start match</button>
+        <button class="btn" id="manualBtn" style="margin-top:10px">Log a finished game</button>
+        <button class="btn btn--ghost" id="rulesBtn2" style="margin-top:10px">Binho rules</button>
+        <div class="note" id="pregameNote"></div>
+      </div>
+
+      <div class="board" id="live" style="display:none">
+        <div class="side side--away" id="sideAway" style="--accent:var(--away)">
+          <div class="side__glow"></div>
+          <button class="side__tap" id="tapAway" aria-label="Goal for away player"></button>
+          <div class="side__in">
+            <div id="avLiveAway"></div>
+            <div class="pname" id="liveAway">Away</div>
+            <div class="pscore" id="scoreAway">0</div>
+            <div class="marks" id="marksAway"></div>
+          </div>
+          <div class="side__tools">
+            <button class="tool" data-minus="away">Goal −1</button>
+            <button class="tool tool--og" data-own="away">Own goal</button>
+            <button class="tool tool--y" data-mark="away:y">Yellow</button>
+            <button class="tool tool--r" data-mark="away:r">Red</button>
+            <button class="tool" data-mark="away:t">Technical</button>
+          </div>
+        </div>
+
+        <div class="mid">
+          <button class="mid-btn" id="undoBtn" disabled>Undo</button>
+          <div>
+            <button class="clock" id="clock">5:00</button>
+            <div class="clock-sub" id="clockSub">Tap to start</div>
+          </div>
+          <button class="mid-btn right" id="endBtn">End</button>
+          <div class="flag" id="flag" style="display:none"></div>
+        </div>
+
+        <div class="side side--home" id="sideHome" style="--accent:var(--home)">
+          <div class="side__glow"></div>
+          <button class="side__tap" id="tapHome" aria-label="Goal for home player"></button>
+          <div class="side__in">
+            <div id="avLiveHome"></div>
+            <div class="pname" id="liveHome">Home</div>
+            <div class="pscore" id="scoreHome">0</div>
+            <div class="marks" id="marksHome"></div>
+          </div>
+          <div class="side__tools">
+            <button class="tool" data-minus="home">Goal −1</button>
+            <button class="tool tool--og" data-own="home">Own goal</button>
+            <button class="tool tool--y" data-mark="home:y">Yellow</button>
+            <button class="tool tool--r" data-mark="home:r">Red</button>
+            <button class="tool" data-mark="home:t">Technical</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STANDINGS -->
+    <section class="view" id="v-standings">
+      <div class="pad">
+        <h2>Standings</h2>
+        <div class="seg" id="scopeSeg">
+          <button class="on" data-scope="league">Season</button>
+          <button data-scope="standard">Standard</button>
+        </div>
+        <div class="sub" id="standSub"></div>
+        <div id="standWrap"></div>
+        <h3>Season leaders</h3>
+        <div id="leaders" class="empty">Play a match to fill this in.</div>
+        <h3 id="discHead">Discipline</h3>
+        <div id="discWrap" class="empty">No cards shown yet.</div>
+        <h3 id="puHead">Power ups — league wide</h3>
+        <div id="puWrap" class="empty">No power ups logged yet.</div>
+        <h3 id="ecHead">Event cards — league wide</h3>
+        <div id="ecWrap" class="empty">No event cards logged yet.</div>
+        <button class="btn" id="selCopyBtn" style="margin-top:14px">Copy selection stats</button>
+        <textarea id="selExport" readonly style="margin-top:10px" aria-label="Selection stats for the sheet"></textarea>
+      </div>
+    </section>
+
+    <!-- MATCHUPS -->
+    <section class="view" id="v-matchups">
+      <div class="pad">
+        <h2>Head to head</h2>
+        <div class="seg" id="mxScopeSeg">
+          <button class="on" data-scope="league">Season</button>
+          <button data-scope="standard">Standard</button>
+        </div>
+        <div class="sub" id="mxSub">Pick a player to see where each series stands.</div>
+        <div class="field"><label>Player</label><select id="mxPlayer"></select></div>
+        <div id="mxProgress"></div>
+        <div id="mxWrap"></div>
+        <h3>Series still open</h3>
+        <div id="mxRemaining" class="empty">Nothing scheduled yet.</div>
+        <h3>Their selections</h3>
+        <div id="mxSel" class="empty">No selections logged yet.</div>
+        <h3>Send to the sheet</h3>
+        <div class="note">One row per pairing, for the Head to Head tab of the workbook.</div>
+        <button class="btn" id="mxCopyBtn" style="margin-top:10px">Copy every pairing</button>
+        <textarea id="mxExport" readonly style="margin-top:10px" aria-label="Pairing rows for the sheet"></textarea>
+      </div>
+    </section>
+
+    <!-- LOG -->
+    <section class="view" id="v-log">
+      <div class="pad">
+        <h2>Match log</h2>
+        <div class="sub" id="logSub">Every recorded game, newest first.</div>
+        <div id="logWrap"></div>
+        <h3>Send to the sheet</h3>
+        <div class="note">Copy every match as tab-separated rows and paste straight into the Log tab of the season workbook.</div>
+        <button class="btn" id="copyBtn" style="margin-top:10px">Copy all rows</button>
+        <textarea id="exportBox" readonly style="margin-top:10px" aria-label="Match rows for the sheet"></textarea>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section class="view" id="v-setup">
+      <div class="pad">
+        <h2>Setup</h2>
+        <div class="sub">The league database is shared — every player who opens this app reads and writes the same records.</div>
+
+        <h3>Access</h3>
+        <div class="note" id="accessState"></div>
+        <div class="row" style="margin-top:10px" id="signRow">
+          <input type="password" id="passInput" placeholder="Passcode" autocomplete="off">
+          <button class="btn" id="signBtn" style="flex:0 0 auto;width:auto;padding:13px 20px">Sign in</button>
+        </div>
+        <div id="recoveryBox" class="recovery" style="display:none"></div>
+        <div id="adminTools" style="display:none">
+          <button class="btn btn--ghost" id="managerPassBtn" style="margin-top:10px">Set the manager passcode</button>
+          <button class="btn btn--ghost" id="changePassBtn" style="margin-top:10px">Change the admin passcode</button>
+          <button class="btn btn--ghost" id="recoveryBtn" style="margin-top:10px">Generate a new recovery code</button>
+        </div>
+        <button class="btn btn--ghost" id="signOutBtn" style="margin-top:10px;display:none">Sign out</button>
+        <div class="note" style="margin-top:12px">Anyone can record games and set photos without signing in. Managers edit the roster, membership, and settings. Admin also ends seasons, erases data, sets passcodes, and holds the Sheet bridge.</div>
+
+        <h3>Players</h3>
+        <div class="row">
+          <input type="text" id="newPlayer" placeholder="Add a player" maxlength="18">
+          <button class="btn" id="addPlayerBtn" style="flex:0 0 auto;width:auto;padding:13px 20px">Add</button>
+        </div>
+        <div id="playerChips"></div>
+        <input type="file" id="photoInput" accept="image/*" style="display:none">
+        <div class="note">In league counts toward the season table and head to head. Guests can still play — their games land in standard play, or in league games only if you mark them in. Photos are open to everyone; roster changes need the passcode.</div>
+
+        <h3>Season rules</h3>
+        <div class="row">
+          <div class="field"><label>Points per win</label><input type="number" id="cfgWin" min="1" max="5"></div>
+          <div class="field"><label>Clean sheet bonus</label><input type="number" id="cfgCS" min="0" max="3"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Regulation minutes</label><input type="number" id="cfgClock" min="0" max="30"></div>
+          <div class="field"><label>Games vs each opponent</label><input type="number" id="cfgReq" min="1" max="99"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Score limit (0 = clock only)</label><input type="number" id="cfgLimit" min="0" max="20"></div>
+          <div class="field"><label>Sudden death at tie of</label><input type="number" id="cfgSd" min="0" max="20"></div>
+        </div>
+        <div class="note">Sudden death starts the moment the score is level at the tie mark, or when regulation time runs out level at any score. From there the next goal wins, and the app pauses on every full minute to make both players remove a field peg.</div>
+
+        <h3>Kickoff countdown</h3>
+        <div class="row">
+          <div class="field"><label>Seconds (0 = off)</label><input type="number" id="cfgCount" min="0" max="10"></div>
+          <div class="field"><label>Try it</label><button class="btn" id="testCountBtn">Test</button></div>
+        </div>
+        <div class="check"><input type="checkbox" id="cfgVoice"><label for="cfgVoice" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Count the numbers out loud</label></div>
+        <div class="note">The whistle blows at zero and the game clock starts on its own. Turn your ringer up — phones stay silent on mute.</div>
+
+
+        <h3>Season</h3>
+        <div class="field"><label>Current season</label><input type="text" id="cfgSeason" maxlength="28" placeholder="August 2026"></div>
+        <button class="btn" id="saveCfgBtn">Save settings</button>
+        <button class="btn btn--ghost" id="archiveBtn" style="margin-top:10px">End season and crown the champion</button>
+        <div class="note">Files the final table and match log under past seasons, then resets standings for the new month. Standard Binho stats are never cleared.</div>
+
+        <h3>Past seasons</h3>
+        <div id="seasonList" class="empty">No seasons closed yet.</div>
+
+        <button class="btn btn--danger" id="wipeBtn" style="margin-top:18px">Erase all league data</button>
+        <div class="note" id="syncNote"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <button class="on" data-tab="board">Board</button>
+    <button data-tab="standings">Table</button>
+    <button data-tab="matchups">H2H</button>
+    <button data-tab="log">Log</button>
+    <button data-tab="setup">Setup</button>
+  </nav>
+</div>
+
+<!-- record result -->
+<div class="veil" id="recVeil">
+  <div class="sheet">
+    <div class="final-who" id="recWho">Full time</div>
+    <div class="final-line" id="recLine">0 – 0</div>
+    <div class="final-who" id="recTags"></div>
+    <h3>Season record</h3>
+    <div class="check" id="recOfficialRow"><input type="checkbox" id="recOfficial" checked><label for="recOfficial" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Office game — counts toward the season</label></div>
+    <div class="note" id="recStdNote" style="display:none">Filed under standard play. It won't touch league standings, head to head, or selection stats.</div>
+    <div class="stepper"><span id="htHomeLabel">Home hat tricks</span><div><button data-ht="home:-1">−</button><span id="htHome">0</span><button data-ht="home:1">+</button></div></div>
+    <div class="stepper"><span id="htAwayLabel">Away hat tricks</span><div><button data-ht="away:-1">−</button><span id="htAway">0</span><button data-ht="away:1">+</button></div></div>
+    <div class="field" style="margin-top:14px"><label>MVP piece</label><input type="text" id="recMvp" placeholder="e.g. left winger peg" maxlength="40"></div>
+    <button class="btn btn--go" id="recSaveBtn" style="margin-top:8px">Record match</button>
+    <button class="btn btn--ghost" id="recBackBtn" style="margin-top:10px">Back to the board</button>
+  </div>
+</div>
+
+<div class="veil" id="manualVeil">
+  <div class="sheet">
+    <h2>Log a finished game</h2>
+    <div class="sub" style="margin-bottom:14px">For a match played away from the app. Everything the live board tracks, entered by hand.</div>
+
+    <div class="row">
+      <div class="field"><label>Game type</label><select id="mType">
+        <option value="league">League match</option>
+        <option value="standard">Standard Binho</option>
+      </select></div>
+      <div class="field"><label>Date played</label><input type="date" id="mDate"></div>
+    </div>
+
+    <h3>Result</h3>
+    <div class="row">
+      <div class="field"><label>Home side</label><select id="mHome"></select></div>
+      <div class="field"><label>Away side</label><select id="mAway"></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label id="mLblSH">Home goals</label><input type="number" id="mSH" min="0" max="99" value="0"></div>
+      <div class="field"><label id="mLblSA">Away goals</label><input type="number" id="mSA" min="0" max="99" value="0"></div>
+    </div>
+    <div class="check"><input type="checkbox" id="mSD"><label for="mSD" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Decided in sudden death</label></div>
+
+    <div id="mLeagueOnly">
+      <h3 id="mDeclHead">Declarations — required</h3>
+      <div class="row">
+        <div class="field"><label id="mLblPuH">Home power up</label><select id="mPuH"></select></div>
+        <div class="field"><label id="mLblEcH">Home event card</label><select id="mEcH"></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label id="mLblPuA">Away power up</label><select id="mPuA"></select></div>
+        <div class="field"><label id="mLblEcA">Away event card</label><select id="mEcA"></select></div>
+      </div>
+      <div class="field"><label>Mode</label><select id="mMode"></select></div>
+      <div class="check"><input type="checkbox" id="mBelt"><label for="mBelt" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Belt match — winner takes the belt</label></div>
+      <div class="check"><input type="checkbox" id="mOfficial" checked><label for="mOfficial" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Office game — counts toward the season</label></div>
+    </div>
+
+    <div id="mStdNote" style="display:none">
+      <div class="note">Filed under standard play — official rules, all-time stats, never counted in league standings. Declarations are optional; leave them blank for a straight game.</div>
+      <div class="check"><input type="checkbox" id="mStdDecl"><label for="mStdDecl" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">This game used power ups and event cards</label></div>
+    </div>
+
+    <h3>Trackable stats</h3>
+    <div class="statgrid">
+      <div></div><div class="sg-head" id="mHeadH">Home</div><div class="sg-head" id="mHeadA">Away</div>
+
+      <label for="mYH">Yellow cards</label>
+      <input type="number" id="mYH" min="0" max="20" value="0"><input type="number" id="mYA" min="0" max="20" value="0">
+
+      <label for="mSyH">Reds from a 2nd yellow</label>
+      <input type="number" id="mSyH" min="0" max="20" value="0"><input type="number" id="mSyA" min="0" max="20" value="0">
+
+      <label for="mSrH">Straight reds</label>
+      <input type="number" id="mSrH" min="0" max="20" value="0"><input type="number" id="mSrA" min="0" max="20" value="0">
+
+      <label for="mTH">Technicals</label>
+      <input type="number" id="mTH" min="0" max="20" value="0"><input type="number" id="mTA" min="0" max="20" value="0">
+
+      <label for="mOgH">Own goals</label>
+      <input type="number" id="mOgH" min="0" max="20" value="0"><input type="number" id="mOgA" min="0" max="20" value="0">
+
+      <label for="mHtH">Hat tricks</label>
+      <input type="number" id="mHtH" min="0" max="20" value="0"><input type="number" id="mHtA" min="0" max="20" value="0">
+    </div>
+    <div class="note" id="mDerived">Pegs lost calculates itself from reds and own goals.</div>
+
+    <div class="field" style="margin-top:14px"><label>MVP piece</label><input type="text" id="mMvp" maxlength="40" placeholder="e.g. left winger peg"></div>
+
+    <button class="btn btn--go" id="mSaveBtn" style="margin-top:8px">Record match</button>
+    <button class="btn btn--ghost" id="mCancelBtn" style="margin-top:10px">Cancel</button>
+  </div>
+</div>
+
+<div class="veil" id="sdVeil">
+  <div class="sheet">
+    <div class="final">
+      <div class="eyebrow" id="sdEyebrow">Sudden death</div>
+      <div class="who" id="sdTitle">Next goal wins</div>
+      <div class="note" id="sdBody"></div>
+      <div class="actions">
+        <button class="btn btn--go" id="sdGoBtn">Start sudden death</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="rulesVeil">
+  <div class="sheet">
+    <h2>Official Binho rules</h2>
+    <div class="sub" style="margin-bottom:14px">Straight from Binho — these govern standard play, and everything in the season rulebook sits on top of them.</div>
+
+    <h3>The game</h3>
+    <ul class="rules">
+      <li>Ball starts at center. First shooter is settled by rock paper scissors or an arm wrestle — though the winner of the previous match shoots first if they're still on the board.</li>
+      <li>Players alternate flicks, each one taken from wherever the ball came to a complete stop.</li>
+      <li>In 2v2 the order alternates across teams: team 1 player 1, team 2 player 1, team 1 player 2, team 2 player 2.</li>
+      <li>First to 7 goals wins.</li>
+      <li>The ball has to fully cross the goal line — you should see turf behind it. Bouncing back out still counts.</li>
+      <li>Whoever conceded kicks off from center.</li>
+    </ul>
+
+    <h3>Cards</h3>
+    <ul class="rules">
+      <li><b>Yellow</b> — opponent gets a free kick from center field.</li>
+      <li><b>Second yellow becomes a red.</b></li>
+      <li><b>Red</b> — opponent takes a penalty from anywhere behind midfield and you lose a player. Which one is decided by a card flip: the opponent flips, the offender calls red or yellow, and the winner picks the piece that comes off. Cards reset afterward.</li>
+    </ul>
+
+    <h3>What earns a card</h3>
+    <ul class="rules">
+      <li>Touching or double-touching the ball before your shot — yellow, or red inside your own box.</li>
+      <li>Fingering the crossbar on any shot — automatic red.</li>
+      <li>Putting the ball out of bounds — yellow from open play, red from inside your own box.</li>
+      <li>Moving the board mid-shot — yellow, or red inside your own box.</li>
+      <li>Your head can't cross the midfield line during a shot.</li>
+    </ul>
+
+    <div class="note" style="margin-top:14px">Season note: under our house rules an own goal also costs you a player. Standard Binho games follow the official version above.</div>
+
+    <h3>Good to know</h3>
+    <ul class="rules">
+      <li>When the ball sits against the bands you may flick from behind them, fingers technically out of bounds.</li>
+      <li>Against a sideline or baseline, only your shooting hand may pull the band back.</li>
+    </ul>
+
+    <div class="row" style="margin-top:20px">
+      <a class="btn" href="https://binhoboard.com/pages/how-to-play" target="_blank" rel="noopener">Full rules at binhoboard.com</a>
+    </div>
+    <button class="btn btn--go" id="rulesCloseBtn" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
+<div class="count" id="countVeil" aria-live="assertive">
+  <b id="countNum">3</b>
+  <small id="countLbl">Hands off the board</small>
+</div>
+
+<div class="banner" id="banner" style="display:none"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var POWER_UPS = ['Double Flick','Rewind','Freeze'];
+  var EVENTS = ['Rain Delay','Injured Star','Slippery Field','Extra Time'];
+  var MODES = ['Standard','Last Man Standing','Captain Rule','The Crowd','Beer Goggles','Lightning Round','Penalty Roulette','Invisible Wall','No Looking','The Messi'];
+
+  var league = {
+    players: [],
+    members: [],
+    matches: [],
+    belt: null,
+    archives: [],
+    cfg: { winPts:3, csPts:1, clockMin:5, scoreLimit:7, sdScore:5, req:20, countdown:3, voice:true, seasonName:'' }
+  };
+
+  var game = null, undoStack = [], timer = null;
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+
+  function toast(msg){
+    var t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(t._t); t._t = setTimeout(function(){ t.classList.remove('on'); }, 2200);
+  }
+
+  /* ---------------- backend ---------------- */
+  function blank(){ return { players:[], members:[], matches:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:''} }; }
+
+  var API = (window.BINHO_CONFIG && window.BINHO_CONFIG.apiUrl) || '';
+  var token = null;
+
+  function banner(msg){
+    var el = $('banner');
+    if(!msg){ el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  // text/plain keeps this a simple request, so the browser skips the preflight
+  // that Apps Script cannot answer
+  async function api(payload){
+    if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
+    try {
+      var res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      var data = await res.json();
+      if(!data.ok){
+        toast(data.error || 'The league server refused that');
+        return null;
+      }
+      banner('');
+      $('syncNote').textContent = 'Last synced ' + new Date().toLocaleTimeString();
+      return data;
+    } catch(err){
+      banner('Cannot reach the league server. Changes are not being saved.');
+      return null;
+    }
+  }
+
+  function applyState(state){
+    if(!state) return;
+    league = Object.assign(blank(), state);
+    league.cfg = Object.assign(blank().cfg, state.cfg || {});
+    if(!Array.isArray(league.members)) league.members = league.players.slice();
+    avatars = state.photos || {};
+  }
+
+  function publicCfg(cfg){
+    var out = {};
+    ['winPts','csPts','clockMin','scoreLimit','sdScore','req','countdown','voice','seasonName']
+      .forEach(function(k){ out[k] = cfg[k]; });
+    return out;
+  }
+
+  // Call sites still mutate the league object. This works out what actually changed
+  // and sends the matching action, so the server decides whether the caller may do it.
+  async function commit(mutate){
+    var before = JSON.parse(JSON.stringify({
+      players: league.players, members: league.members, cfg: publicCfg(league.cfg),
+      matchIds: league.matches.map(function(m){ return m.id; }),
+      archives: league.archives.length
+    }));
+
+    mutate(league);
+
+    var jobs = [];
+    var wiped = before.players.length && !league.players.length && !league.matches.length;
+
+    if(wiped){
+      jobs.push({ action:'wipe' });
+    } else if(league.archives.length > before.archives){
+      var a = league.archives[0] || {};
+      jobs.push({ action:'season', name:a.name, champion:a.champion, table:a.table });
+    } else {
+      var had = {};
+      before.matchIds.forEach(function(id){ had[id] = true; });
+      league.matches.forEach(function(m){ if(!had[m.id]) jobs.push({ action:'match', match:m }); });
+      var still = {};
+      league.matches.forEach(function(m){ still[m.id] = true; });
+      before.matchIds.forEach(function(id){ if(!still[id]) jobs.push({ action:'deleteMatch', id:id }); });
+    }
+
+    if(!wiped){
+      if(JSON.stringify(before.players) !== JSON.stringify(league.players) ||
+         JSON.stringify(before.members) !== JSON.stringify(league.members)){
+        jobs.push({ action:'roster', players:league.players, members:league.members });
+      }
+      if(JSON.stringify(before.cfg) !== JSON.stringify(publicCfg(league.cfg))){
+        jobs.push({ action:'settings', cfg:publicCfg(league.cfg) });
+      }
+    }
+
+    for(var i = 0; i < jobs.length; i++){
+      jobs[i].token = token;
+      var res = await api(jobs[i]);
+      if(res && res.state){ applyState(res.state); continue; }
+      // the server said no, so drop the optimistic change and show what it actually holds
+      var fresh = await api({ action:'state' });
+      if(fresh && fresh.state) applyState(fresh.state);
+      break;
+    }
+    renderAll();
+  }
+
+  /* ---------------- player photos ---------------- */
+  var avatars = {};   // name -> data URL, kept in its own storage key per player
+
+  function initials(name){
+    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if(!parts.length) return '?';
+    return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+  }
+
+  function avatarHTML(name, cls){
+    var url = avatars[name];
+    return '<span class="avatar ' + (cls || '') + '"' +
+      (url ? ' style="background-image:url(' + url + ')"' : '') + '>' +
+      (url ? '' : esc(initials(name))) + '</span>';
+  }
+
+  // photos arrive with the league state, so there is nothing to load separately
+
+  // square-crop and shrink before storing so the shared record stays small
+  function readPhoto(file, cb){
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function(){
+      var size = 200;
+      var canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      var ctx = canvas.getContext('2d');
+      var side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      cb(canvas.toDataURL('image/jpeg', 0.78));
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); toast('Could not read that image'); };
+    img.src = url;
+  }
+
+  async function savePhoto(name, dataUrl){
+    var res = await api({ action:'photo', name:name, image:dataUrl, token:token });
+    if(!res) return;
+    avatars[name] = dataUrl;
+    renderAll();
+    updatePregame();
+    toast('Photo saved');
+  }
+
+  /* ---------------- sound ---------------- */
+  var actx = null;
+  function audio(){
+    try{
+      if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if(actx.state === 'suspended') actx.resume();
+      return actx;
+    }catch(e){ return null; }
+  }
+
+  function say(text){
+    if(!league.cfg.voice) return;
+    try{
+      if(!window.speechSynthesis) return;
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05; u.volume = 1;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+
+  // synthesised referee whistle: two close tones with a fast trill, plus breath noise
+  var W_KICKOFF  = [[0, 0.62]];
+  var W_MINUTE   = [[0, 0.26], [0.36, 0.26]];
+  var W_FULLTIME = [[0, 0.32], [0.42, 0.32], [0.84, 0.95]];
+
+  function blast(ctx, t, dur){
+    var master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, t);
+    master.gain.exponentialRampToValueAtTime(0.5, t + 0.03);
+    master.gain.setValueAtTime(0.5, Math.max(t + 0.04, t + dur - 0.14));
+    master.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    master.connect(ctx.destination);
+
+    [[2050, 1], [3080, 0.32]].forEach(function(pair){
+      var osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(pair[0], t);
+      var g = ctx.createGain(); g.gain.value = pair[1] * 0.5;
+      var lfo = ctx.createOscillator(); lfo.frequency.value = 19;
+      var lg = ctx.createGain(); lg.gain.value = pair[0] * 0.022;
+      lfo.connect(lg); lg.connect(osc.frequency);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + dur);
+      lfo.start(t); lfo.stop(t + dur);
+    });
+
+    var frames = Math.floor(ctx.sampleRate * dur);
+    var buf = ctx.createBuffer(1, frames, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for(var i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
+    var noise = ctx.createBufferSource(); noise.buffer = buf;
+    var band = ctx.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 2400; band.Q.value = 1.4;
+    var ng = ctx.createGain(); ng.gain.value = 0.09;
+    noise.connect(band); band.connect(ng); ng.connect(master);
+    noise.start(t); noise.stop(t + dur);
+  }
+
+  function whistle(pattern){
+    var ctx = audio(); if(!ctx) return;
+    (pattern || W_KICKOFF).forEach(function(p){
+      blast(ctx, ctx.currentTime + p[0], p[1]);
+    });
+  }
+
+  function countdown(done){
+    var n = Math.max(0, Math.min(10, league.cfg.countdown | 0));
+    audio();
+    var veil = $('countVeil'), num = $('countNum'), lbl = $('countLbl');
+    if(!n){ whistle(); done(); return; }
+    veil.classList.add('open'); veil.classList.remove('go');
+    lbl.textContent = 'Hands off the board';
+    var i = n;
+    function step(){
+      num.textContent = i;
+      num.style.animation = 'none'; void num.offsetWidth; num.style.animation = '';
+      say(String(i));
+      i--;
+      setTimeout(i >= 1 ? step : blow, 1000);
+    }
+    function blow(){
+      whistle();
+      veil.classList.add('go');
+      num.textContent = 'PLAY';
+      num.style.animation = 'none'; void num.offsetWidth; num.style.animation = '';
+      lbl.textContent = 'Clock running';
+      setTimeout(function(){ veil.classList.remove('open','go'); done(); }, 800);
+    }
+    step();
+  }
+
+  async function boot(){
+    var res = await api({ action:'state' });
+    if(res) applyState(res.state);
+    renderAll();
+  }
+
+  /* ---------------- standings ---------------- */
+  function isStandard(m){ return m.type === 'standard'; }
+  function leagueMatches(){ return league.matches.filter(function(m){ return !isStandard(m) && m.official; }); }
+  function standardMatches(){ return league.matches.filter(isStandard); }
+
+  function statsFor(name, matches){
+    var s = {name:name, gp:0, w:0, l:0, gf:0, ga:0, cs:0, ht:0, y:0, r:0, sy:0, t:0, og:0, pts:0, susp:false};
+    matches.forEach(function(m){
+      var isH = m.home === name, isA = m.away === name;
+      if(!isH && !isA) return;
+      var mine = isH ? m.sh : m.sa, theirs = isH ? m.sa : m.sh;
+      s.gp++; s.gf += mine; s.ga += theirs;
+      s.ht += isH ? (m.htH||0) : (m.htA||0);
+      s.y += isH ? (m.yH||0) : (m.yA||0);
+      s.r += isH ? (m.rH||0) : (m.rA||0);
+      s.sy += isH ? (m.syH||0) : (m.syA||0);
+      s.og += isH ? (m.ogH||0) : (m.ogA||0);
+      s.t += isH ? (m.tH||0) : (m.tA||0);
+      if(mine > theirs){
+        s.w++; s.pts += league.cfg.winPts;
+        if(theirs === 0){ s.cs++; s.pts += league.cfg.csPts; }
+      } else { s.l++; }
+    });
+    var last = matches.filter(function(m){ return m.home === name || m.away === name; })[0];
+    if(last){ var tech = last.home === name ? (last.tH||0) : (last.tA||0); s.susp = tech >= 2; }
+    s.gd = s.gf - s.ga;
+    return s;
+  }
+
+  var scope = 'league';
+  var role = 'guest';   // guest | manager | admin — per device, per session
+
+  function members(){
+    return Array.isArray(league.members) ? league.members : league.players;
+  }
+  function isMember(name){ return members().indexOf(name) > -1; }
+  function poolFor(type){ return type === 'standard' ? league.players : members(); }
+
+  function isAdmin(){ return role === 'admin'; }
+  function canManage(){ return role === 'manager' || role === 'admin'; }
+  function canAdmin(){ return role === 'admin'; }
+
+  function requireManage(){
+    if(canManage()) return true;
+    toast('Manager or admin sign-in needed for that');
+    return false;
+  }
+  function requireAdmin(){
+    if(canAdmin()) return true;
+    toast('Admin sign-in needed for that');
+    return false;
+  }
+
+  function showRecovery(code, label){
+    var box = $('recoveryBox');
+    box.style.display = 'block';
+    box.innerHTML = '<span>' + esc(label || 'Recovery code') + ' — write this down now. The server keeps only a ' +
+      'hash of it, so it cannot be shown again.</span><b>' + esc(code) + '</b>' +
+      '<span>Reloading this page clears it from the screen.</span>';
+  }
+
+  function renderAccess(){
+    $('accessState').textContent =
+      role === 'admin' ? 'Signed in as admin. The session expires after 12 hours.'
+      : role === 'manager' ? 'Signed in as manager. The session expires after 12 hours.'
+      : 'Signed out. You can still record games and set photos — all anyone needs to play.';
+    $('signBtn').textContent = 'Sign in';
+    $('signRow').style.display = (role === 'guest') ? 'flex' : 'none';
+    $('signOutBtn').style.display = (role === 'guest') ? 'none' : 'block';
+    $('adminTools').style.display = isAdmin() ? 'block' : 'none';
+  }
+  function inScope(m, sc){
+    return (sc || scope) === 'league' ? (!isStandard(m) && m.official) : isStandard(m);
+  }
+  function scopedMatches(sc){
+    return league.matches.filter(function(m){ return inScope(m, sc); });
+  }
+  function defaultSeason(){
+    return new Date().toLocaleString(undefined, {month:'long', year:'numeric'});
+  }
+  function seasonName(){ return league.cfg.seasonName || defaultSeason(); }
+
+  function standingsRows(ms, isL){
+    return (isL ? members() : league.players).map(function(p){ return statsFor(p, ms); })
+      .filter(function(s){ return isL || s.gp > 0; })
+      .sort(function(a, b){
+        return isL
+          ? (b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name))
+          : (b.w - a.w || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name));
+      });
+  }
+
+  /* ---------------- game flow ---------------- */
+  var gameType = 'league';
+
+  function startMatch(){
+    var h = $('selHome').value, a = $('selAway').value;
+    if(!h || !a || h === a){ toast('Pick two different players'); return; }
+    var std = gameType === 'standard';
+    var decl = !std || $('stdDecl').checked;
+    if(decl){
+      if(!$('puHome').value || !$('ecHome').value){ toast(h + ' still needs a power up and an event card'); return; }
+      if(!$('puAway').value || !$('ecAway').value){ toast(a + ' still needs a power up and an event card'); return; }
+    }
+    game = {
+      home:h, away:a, sh:0, sa:0,
+      yH:0, yA:0, rH:0, rA:0, tH:0, tA:0,
+      syH:0, syA:0, pyH:0, pyA:0, ogH:0, ogA:0, sdMin:0,
+      std:std,
+      puH: decl ? $('puHome').value : '', puA: decl ? $('puAway').value : '',
+      ecH: decl ? $('ecHome').value : '', ecA: decl ? $('ecAway').value : '',
+      mode: std ? 'Standard Binho' : $('selMode').value,
+      belt: std ? false : $('selBelt').checked,
+      limit: std ? 7 : league.cfg.scoreLimit,
+      left: std ? 0 : league.cfg.clockMin * 60,
+      running:false, sd:false, over:false, htH:0, htA:0
+    };
+    undoStack = [];
+    $('pregame').style.display = 'none';
+    $('live').style.display = 'grid';
+    $('liveHome').textContent = 'Home (' + h + ')';
+    $('liveAway').textContent = 'Away (' + a + ')';
+    $('avLiveHome').innerHTML = avatarHTML(h, 'avatar--lg');
+    $('avLiveAway').innerHTML = avatarHTML(a, 'avatar--lg');
+    renderLive();
+    countdown(function(){
+      if(game && !game.running && game.left > 0){
+        game.running = true;
+        timer = setInterval(tick, 1000);
+      }
+      renderLive();
+    });
+  }
+
+  function snap(){
+    if(!game) return;
+    undoStack.push(JSON.stringify({sh:game.sh,sa:game.sa,yH:game.yH,yA:game.yA,rH:game.rH,rA:game.rA,
+      tH:game.tH,tA:game.tA,syH:game.syH,syA:game.syA,pyH:game.pyH,pyA:game.pyA,
+      ogH:game.ogH,ogA:game.ogA,sd:game.sd,sdMin:game.sdMin,over:game.over}));
+    if(undoStack.length > 80) undoStack.shift();
+  }
+
+  function applyGoal(side){
+    if(side === 'home') game.sh++; else game.sa++;
+    var el = $(side === 'home' ? 'sideHome' : 'sideAway');
+    el.classList.add('pop'); setTimeout(function(){ el.classList.remove('pop'); }, 220);
+    if(game.sd){ endGame(); return; }
+    var limit = game.limit;
+    if(limit > 0 && (game.sh >= limit || game.sa >= limit)){ endGame(); return; }
+    // house rule: a tie at the sudden-death mark ends regulation on the spot
+    if(!game.std && game.sh === game.sa && game.sh >= league.cfg.sdScore){ enterSuddenDeath('score'); return; }
+    renderLive();
+  }
+
+  function goal(side){
+    if(!game || game.over) return;
+    snap();
+    applyGoal(side);
+  }
+
+  // own goal: counts for the opponent, restart from center
+  function ownGoal(by){
+    if(!game || game.over) return;
+    snap();
+    game['og' + (by === 'home' ? 'H' : 'A')]++;
+    toast(game.std
+      ? 'Own goal — counts for ' + (by === 'home' ? game.away : game.home)
+      : 'Own goal — counts for ' + (by === 'home' ? game.away : game.home) + ', remove one of your players');
+    applyGoal(by === 'home' ? 'away' : 'home');
+  }
+
+  function minus(side){
+    if(!game || game.over) return;
+    if(side === 'home' && game.sh > 0){ snap(); game.sh--; }
+    else if(side === 'away' && game.sa > 0){ snap(); game.sa--; }
+    renderLive();
+  }
+
+  function mark(side, kind){
+    if(!game || game.over) return;
+    snap();
+    var S = side === 'home' ? 'H' : 'A';
+    if(kind === 'y'){
+      game['y'+S]++;          // every yellow stays on the record
+      game['py'+S]++;         // pending pair toward a red
+      if(game['py'+S] >= 2){
+        game['py'+S] = 0;
+        game['r'+S]++;
+        game['sy'+S]++;       // red earned by a second yellow
+        toast('Second yellow — that is a red');
+      }
+    } else if(kind === 'r'){
+      game['r'+S]++;          // straight red, yellows untouched
+    } else {
+      game['t'+S]++;
+      if(game['t'+S] >= 2) toast('Two technicals — forfeit and a one-game suspension');
+    }
+    renderLive();
+  }
+
+  function undo(){
+    var prev = undoStack.pop(); if(!prev || !game) return;
+    Object.assign(game, JSON.parse(prev));
+    renderLive();
+  }
+
+  function toggleClock(){
+    if(!game || game.over) return;
+    if(game.running){ stopClock(); game.running = false; }
+    else if(!game.sd && game.left <= 0){ return; }
+    else {
+      game.running = true;
+      timer = setInterval(tick, 1000);
+    }
+    renderLive();
+  }
+  function stopClock(){ clearInterval(timer); timer = null; }
+
+  function tick(){
+    if(!game) return;
+    if(game.sd){
+      game.left++;
+      if(game.left % 60 === 0){ promptRemoval(); return; }
+    } else {
+      game.left--;
+      if(game.left <= 0){
+        game.left = 0; stopClock(); game.running = false;
+        if(game.sh === game.sa){ enterSuddenDeath('time'); return; }
+        endGame(); return;
+      }
+    }
+    renderLive();
+  }
+
+  /* ---------------- sudden death ---------------- */
+  function showSD(eyebrow, title, body, btn){
+    $('sdEyebrow').textContent = eyebrow;
+    $('sdTitle').textContent = title;
+    $('sdBody').textContent = body;
+    $('sdGoBtn').textContent = btn;
+    $('sdVeil').classList.add('open');
+  }
+
+  function enterSuddenDeath(cause){
+    stopClock();
+    game.running = false;
+    game.sd = true;
+    game.left = 0;
+    game.sdMin = 0;
+    whistle(W_FULLTIME);
+    say('Sudden death');
+    showSD('Sudden death',
+      'Next goal wins',
+      (cause === 'score'
+        ? 'Level at ' + game.sh + '–' + game.sa + '. '
+        : 'Regulation is over and it is level at ' + game.sh + '–' + game.sa + '. ') +
+      'Every full minute without a goal, each player removes one of their own field pegs. Goalkeepers stay on the board.',
+      'Start sudden death');
+    renderLive();
+  }
+
+  function promptRemoval(){
+    stopClock();
+    game.running = false;
+    game.sdMin++;
+    whistle(W_MINUTE);
+    say('Remove a player');
+    showSD('Minute ' + game.sdMin,
+      'Remove a field peg',
+      'Each player takes one of their own field pegs off the board — goalkeepers stay. That is ' +
+      game.sdMin + ' off each side so far. Press play once both pegs are off.',
+      'Resume the clock');
+    renderLive();
+  }
+
+  function resumeSD(){
+    $('sdVeil').classList.remove('open');
+    if(!game || game.over) return;
+    game.running = true;
+    whistle(W_KICKOFF);
+    stopClock();
+    timer = setInterval(tick, 1000);
+    renderLive();
+  }
+
+  function endGame(){
+    if(!game) return;
+    stopClock(); game.running = false; game.over = true;
+    $('sdVeil').classList.remove('open');
+    whistle(W_FULLTIME);
+    say('Full time');
+    var win = game.sh > game.sa ? game.home : (game.sa > game.sh ? game.away : null);
+    $('recWho').textContent = win ? win + ' wins' : 'Level — no winner';
+    $('recLine').textContent = Math.max(game.sh, game.sa) + ' – ' + Math.min(game.sh, game.sa);
+    var tags = [];
+    if(game.std) tags.push('Standard Binho');
+    if(game.sd) tags.push('Sudden death');
+    if(win && Math.min(game.sh, game.sa) === 0) tags.push('Clean sheet');
+    if(Math.abs(game.sh - game.sa) >= 5 && !game.std) tags.push('Mercy rule');
+    if(game.ogH + game.ogA) tags.push(game.std ? 'Own goal' : 'Own goal — player removed');
+    if(game.belt) tags.push('Belt match');
+    if(game.mode !== 'Standard' && !game.std) tags.push(game.mode);
+    $('recTags').textContent = tags.join(' · ');
+    $('recOfficialRow').style.display = game.std ? 'none' : 'flex';
+    $('recStdNote').style.display = game.std ? 'block' : 'none';
+    $('htHomeLabel').textContent = game.home + ' hat tricks';
+    $('htAwayLabel').textContent = game.away + ' hat tricks';
+    game.htH = 0; game.htA = 0;
+    $('htHome').textContent = '0'; $('htAway').textContent = '0';
+    $('recMvp').value = '';
+    $('recOfficial').checked = true;
+    $('recVeil').classList.add('open');
+    renderLive();
+  }
+
+  async function saveMatch(){
+    var g = game; if(!g) return;
+    var rec = {
+      id: 'm' + Date.now() + Math.random().toString(36).slice(2,6),
+      ts: Date.now(),
+      home:g.home, away:g.away, sh:g.sh, sa:g.sa,
+      sd:g.sd, mode:g.mode, belt:g.belt, type: g.std ? 'standard' : 'league',
+      yH:g.yH, yA:g.yA, rH:g.rH, rA:g.rA, tH:g.tH, tA:g.tA, syH:g.syH, syA:g.syA,
+      htH:g.htH, htA:g.htA, ogH:g.ogH, ogA:g.ogA, mvp:$('recMvp').value.trim(),
+      puH:g.puH, puA:g.puA, ecH:g.ecH, ecA:g.ecA,
+      official: g.std ? false : $('recOfficial').checked
+    };
+    await commit(function(db){
+      db.matches.unshift(rec);
+      if(rec.belt && !g.std && rec.sh !== rec.sa){
+        db.belt = { holder: rec.sh > rec.sa ? rec.home : rec.away, since: rec.ts };
+      }
+    });
+    pushToSheet(rec);
+    game = null;
+    $('recVeil').classList.remove('open');
+    $('live').style.display = 'none';
+    $('pregame').style.display = 'block';
+    toast('Match recorded');
+  }
+
+  // recorded matches already reach the sheet through the API
+  function pushToSheet(){}
+
+  /* ---------------- manual entry ---------------- */
+  function openManual(){
+    manualPool();
+
+    fillSelect($('mPuH'), POWER_UPS, 'Choose…'); fillSelect($('mPuA'), POWER_UPS, 'Choose…');
+    fillSelect($('mEcH'), EVENTS, 'Choose…'); fillSelect($('mEcA'), EVENTS, 'Choose…');
+    fillSelect($('mMode'), MODES);
+
+    var d = new Date();
+    $('mDate').value = d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    $('mType').value = gameType;
+    ['mSH','mSA','mYH','mYA','mSyH','mSyA','mSrH','mSrA','mTH','mTA','mOgH','mOgA','mHtH','mHtA']
+      .forEach(function(id){ $(id).value = 0; });
+    $('mMvp').value = '';
+    $('mSD').checked = false;
+    $('mBelt').checked = false;
+    $('mOfficial').checked = true;
+    $('mStdDecl').checked = false;
+
+    manualType();
+    manualNames();
+    $('manualVeil').classList.add('open');
+  }
+
+  function manualPool(){
+    var pool = poolFor($('mType').value);
+    var h = $('mHome').value, a = $('mAway').value;
+    var opts = pool.length
+      ? pool.map(function(p){ return '<option>' + esc(p) + '</option>'; }).join('')
+      : '<option value="">Add players in Setup</option>';
+    $('mHome').innerHTML = opts;
+    $('mAway').innerHTML = opts;
+    if(pool.indexOf(h) > -1) $('mHome').value = h;
+    if(pool.indexOf(a) > -1) $('mAway').value = a;
+    else if(pool.length > 1 && $('mAway').value === $('mHome').value) $('mAway').selectedIndex = 1;
+    manualNames();
+  }
+
+  function manualType(){
+    var std = $('mType').value === 'standard';
+    $('mStdNote').style.display = std ? 'block' : 'none';
+    $('mLeagueOnly').style.display = std ? 'none' : 'block';
+    $('mDerived').textContent = std
+      ? 'Under official rules an own goal costs no peg, so pegs lost counts reds only.'
+      : 'Pegs lost calculates itself: one per red card, one per own goal.';
+    if(std && $('mStdDecl').checked) $('mLeagueOnly').style.display = 'block';
+    manualPool();
+  }
+
+  function manualNames(){
+    var h = $('mHome').value || 'Home', a = $('mAway').value || 'Away';
+    $('mHeadH').textContent = h;
+    $('mHeadA').textContent = a;
+    $('mLblSH').textContent = 'Home (' + h + ') goals';
+    $('mLblSA').textContent = 'Away (' + a + ') goals';
+    $('mLblPuH').textContent = 'Home (' + h + ') power up';
+    $('mLblEcH').textContent = 'Home (' + h + ') event card';
+    $('mLblPuA').textContent = 'Away (' + a + ') power up';
+    $('mLblEcA').textContent = 'Away (' + a + ') event card';
+  }
+
+  function n(id){ return Math.max(0, parseInt($(id).value, 10) || 0); }
+
+  async function saveManual(){
+    var std = $('mType').value === 'standard';
+    var h = $('mHome').value, a = $('mAway').value;
+    if(!h || !a || h === a){ toast('Pick two different players'); return; }
+
+    var sh = n('mSH'), sa = n('mSA');
+    if(sh === sa){ toast('A finished match needs a winner'); return; }
+
+    var decl = !std || $('mStdDecl').checked;
+    if(decl && (!$('mPuH').value || !$('mEcH').value || !$('mPuA').value || !$('mEcA').value)){
+      toast('Both players need a power up and an event card');
+      return;
+    }
+
+    var ts = Date.now();
+    if($('mDate').value){
+      var parsed = new Date($('mDate').value + 'T12:00:00');
+      if(!isNaN(parsed.getTime())) ts = parsed.getTime();
+    }
+
+    var rec = {
+      id: 'm' + Date.now() + Math.random().toString(36).slice(2,6),
+      ts: ts,
+      home:h, away:a, sh:sh, sa:sa,
+      sd: $('mSD').checked,
+      mode: std ? 'Standard Binho' : $('mMode').value,
+      belt: std ? false : $('mBelt').checked,
+      type: std ? 'standard' : 'league',
+      yH: n('mYH'), yA: n('mYA'),
+      syH: n('mSyH'), syA: n('mSyA'),
+      rH: n('mSyH') + n('mSrH'), rA: n('mSyA') + n('mSrA'),
+      tH: n('mTH'), tA: n('mTA'),
+      ogH: n('mOgH'), ogA: n('mOgA'),
+      htH: n('mHtH'), htA: n('mHtA'),
+      mvp: $('mMvp').value.trim(),
+      puH: decl ? $('mPuH').value : '', puA: decl ? $('mPuA').value : '',
+      ecH: decl ? $('mEcH').value : '', ecA: decl ? $('mEcA').value : '',
+      official: std ? false : $('mOfficial').checked,
+      entry: 'manual'
+    };
+
+    await commit(function(db){
+      db.matches.unshift(rec);
+      if(rec.belt && !std && rec.sh !== rec.sa){
+        db.belt = { holder: rec.sh > rec.sa ? rec.home : rec.away, since: rec.ts };
+      }
+    });
+    pushToSheet(rec);
+    $('manualVeil').classList.remove('open');
+    toast('Match recorded');
+  }
+
+  /* ---------------- rendering ---------------- */
+  // pegs removed: one per red, plus one per own goal under house rules
+  function downCount(S){
+    return game['r'+S] + (game.std ? 0 : game['og'+S]);
+  }
+
+  function marks(side){
+    var S = side === 'home' ? 'H' : 'A', out = '';
+    for(var i=0;i<Math.min(game['y'+S],5);i++) out += '<div class="card card--y"></div>';
+    for(var j=0;j<Math.min(game['r'+S],4);j++) out += '<div class="card card--r"></div>';
+    for(var k=0;k<Math.min(game['t'+S],3);k++) out += '<div class="card card--t"></div>';
+    if(game['py'+S] === 1) out += '<span class="pend">one from a red</span>';
+    if(game['og'+S]) out += '<span class="og-mark">OG &times;' + game['og'+S] + '</span>';
+    var dn = downCount(S);
+    if(dn) out += '<span class="down-mark">&minus;' + dn + ' player' + (dn > 1 ? 's' : '') + '</span>';
+    return out;
+  }
+
+  function fmt(s){
+    var m = Math.floor(s/60), r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  function renderLive(){
+    if(!game) return;
+    $('scoreHome').textContent = game.sh;
+    $('scoreAway').textContent = game.sa;
+    $('marksHome').innerHTML = marks('home');
+    $('marksAway').innerHTML = marks('away');
+    $('undoBtn').disabled = !undoStack.length;
+    var c = $('clock');
+    c.textContent = game.std ? 'FT ' + game.limit : (game.sd ? '+' + fmt(game.left) : fmt(game.left));
+    c.classList.toggle('sd', game.sd);
+    $('clockSub').textContent = game.over ? 'Full time'
+      : game.std ? 'First to ' + game.limit + ' · no clock'
+      : game.sd ? 'Sudden death · next goal wins' + (game.sdMin ? ' · ' + game.sdMin + ' pegs off each side' : '')
+      : game.running ? 'Tap to pause' : (game.left === league.cfg.clockMin*60 ? 'Tap to start' : 'Tap to resume');
+    var f = $('flag'), lead = Math.abs(game.sh - game.sa);
+    if(lead >= 5 && !game.over && !game.std){
+      f.style.display = 'block';
+      f.textContent = (game.sh > game.sa ? game.home : game.away) + ' plays one defender short';
+    } else f.style.display = 'none';
+  }
+
+  function fillSelect(el, arr, ph){
+    el.innerHTML = (ph ? '<option value="">' + ph + '</option>' : '') +
+      arr.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
+  }
+
+  function renderPlayers(){
+    var h = $('selHome').value, a = $('selAway').value;
+    var opts = poolFor(gameType);
+    [['selHome',h],['selAway',a]].forEach(function(pair){
+      var el = $(pair[0]);
+      el.innerHTML = opts.length
+        ? opts.map(function(p){ return '<option>' + esc(p) + '</option>'; }).join('')
+        : '<option value="">Add players in Setup</option>';
+      if(pair[1] && opts.indexOf(pair[1]) > -1) el.value = pair[1];
+    });
+    if(opts.length > 1 && $('selHome').value === $('selAway').value) $('selAway').selectedIndex = 1;
+    $('startBtn').disabled = opts.length < 2;
+    $('pregameNote').textContent = opts.length < 2
+      ? (gameType === 'league'
+          ? 'A league match needs at least two players marked In league in Setup.'
+          : 'Add at least two players in Setup before starting a match.')
+      : '';
+    updatePregame();
+    var dis = canManage() ? '' : ' disabled';
+    $('playerChips').innerHTML = league.players.length
+      ? league.players.map(function(p){
+          var inLeague = isMember(p);
+          return '<div class="roster-row">' + avatarHTML(p, 'avatar--sm') +
+            '<span class="rname">' + esc(p) + '</span>' +
+            '<button class="member' + (inLeague ? ' on' : '') + '" data-member="' + esc(p) + '"' + dis + '>' +
+            (inLeague ? 'In league' : 'Guest') + '</button>' +
+            '<button class="photo" data-photo="' + esc(p) + '">Photo</button>' +
+            '<button class="x" data-rm="' + esc(p) + '"' + dis + '>×</button></div>';
+        }).join('')
+      : '<div class="note">No players yet.</div>';
+    $('addPlayerBtn').disabled = !canManage();
+    renderAccess();
+  }
+
+  function updatePregame(){
+    var h = $('selHome').value, a = $('selAway').value;
+    $('muHome').textContent = h || '—';
+    $('muAway').textContent = a || '—';
+    $('avHome').innerHTML = h ? avatarHTML(h) : '';
+    $('avAway').innerHTML = a ? avatarHTML(a) : '';
+    $('lblPuHome').textContent = 'Home' + (h ? ' (' + h + ')' : '') + ' power up';
+    $('lblEcHome').textContent = 'Home' + (h ? ' (' + h + ')' : '') + ' event card';
+    $('lblPuAway').textContent = 'Away' + (a ? ' (' + a + ')' : '') + ' power up';
+    $('lblEcAway').textContent = 'Away' + (a ? ' (' + a + ')' : '') + ' event card';
+  }
+
+  function renderStandings(){
+    var isL = scope === 'league';
+    var ms = scopedMatches();
+    var rows = standingsRows(ms, isL);
+    var need = seasonNeed();
+    $('standSub').textContent = isL
+      ? seasonName() + ' · ' + ms.length + ' official ' + (ms.length === 1 ? 'game' : 'games') + ' · ' +
+        league.cfg.req + ' per opponent, ' + need + ' to qualify · ' +
+        league.cfg.winPts + ' pts per win, +' + league.cfg.csPts + ' clean sheet · goal difference breaks ties'
+      : 'Official Binho rules, first to 7 · ' + ms.length + ' ' + (ms.length === 1 ? 'game' : 'games') +
+        ' · all-time record, never cleared when a season ends';
+    $('discHead').textContent = isL ? 'Discipline' : 'Discipline — standard play';
+    $('puHead').textContent = isL ? 'Power ups — league wide' : 'Power ups — standard play';
+    $('ecHead').textContent = isL ? 'Event cards — league wide' : 'Event cards — standard play';
+
+    if(!rows.length){
+      $('standWrap').innerHTML = '<div class="empty">' +
+        (isL ? 'Add players in Setup to build the table.' : 'No standard games recorded yet.') + '</div>';
+    } else {
+      $('standWrap').innerHTML =
+        '<table><thead><tr><th>Player</th><th>GP</th><th>W</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>CS</th><th>' +
+        (isL ? 'Pts' : 'Win%') + '</th></tr></thead><tbody>' +
+        rows.map(function(s, i){
+          var cls = isL ? (s.gp >= need ? 'gp-done' : 'gp-short') : '';
+          return '<tr><td><span class="rank">' + (i+1) + '</span>' + avatarHTML(s.name, 'avatar--sm') + esc(s.name) +
+            (isL && s.susp ? '<span class="warn">Suspended next game</span>' : '') + '</td>' +
+            '<td class="' + cls + '">' + s.gp + (isL ? '/' + need : '') + '</td><td>' + s.w + '</td><td>' + s.l + '</td>' +
+            '<td>' + s.gf + '</td><td>' + s.ga + '</td><td>' + (s.gd > 0 ? '+' : '') + s.gd + '</td>' +
+            '<td>' + s.cs + '</td><td><b>' + (isL ? s.pts : Math.round(s.w / s.gp * 100) + '%') + '</b></td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    var ht = rows.slice().sort(function(a,b){ return b.ht - a.ht; })[0];
+    var sc = rows.slice().sort(function(a,b){ return b.gf - a.gf; })[0];
+    var cl = rows.slice().sort(function(a,b){ return b.cs - a.cs; })[0];
+    var bits = [];
+    if(sc && sc.gf) bits.push('Top scorer — ' + esc(sc.name) + ' (' + sc.gf + ')');
+    if(ht && ht.ht) bits.push('Hat tricks — ' + esc(ht.name) + ' (' + ht.ht + ')');
+    if(cl && cl.cs) bits.push('Clean sheets — ' + esc(cl.name) + ' (' + cl.cs + ')');
+    var og = rows.slice().sort(function(a,b){ return b.og - a.og; })[0];
+    if(og && og.og) bits.push('Own goals — ' + esc(og.name) + ' (' + og.og + ')');
+    $('leaders').innerHTML = bits.length
+      ? '<div class="note" style="font-size:.7rem">' + bits.join('<br>') + '</div>'
+      : 'Play a match to fill this in.';
+
+    var disc = rows.filter(function(s){ return s.y + s.r + s.t + s.og > 0; })
+      .sort(function(a,b){ return (b.r*3+b.y+b.t*3) - (a.r*3+a.y+a.t*3); });
+    var dw = $('discWrap');
+    if(!disc.length){
+      dw.className = 'empty';
+      dw.innerHTML = 'No cards shown yet.';
+    } else {
+      dw.className = '';
+      dw.innerHTML = '<table><thead><tr><th>Player</th><th>Yellow</th><th>Red</th><th>2Y&rarr;R</th><th>Tech</th><th>OG</th><th>Pegs lost</th></tr></thead><tbody>' +
+        disc.map(function(s){
+          return '<tr><td>' + esc(s.name) + '</td><td>' + s.y + '</td><td>' + s.r + '</td>' +
+            '<td>' + s.sy + '</td><td>' + s.t + '</td><td>' + s.og + '</td>' +
+            '<td>' + (isL ? s.r + s.og : s.r) + '</td></tr>';
+        }).join('') + '</tbody></table>' +
+        '<div class="note">' + (isL
+          ? 'Pegs lost counts one per red card and one per own goal. The own goal itself still sits in the opponent\'s GF.'
+          : 'Standard play follows official Binho — a red costs a player, an own goal does not.') + '</div>';
+    }
+  }
+
+  function between(a, b){
+    return league.matches.filter(function(m){
+      return (m.home === a && m.away === b) || (m.home === b && m.away === a);
+    });
+  }
+
+  function pairStats(a, b, sc){
+    return statsFor(a, between(a, b).filter(function(m){ return inScope(m, sc); }));
+  }
+
+  function seasonNeed(){
+    return league.cfg.req * Math.max(0, members().length - 1);
+  }
+
+  /* ---------------- power ups & event cards ---------------- */
+  function selectionStats(player, sc){
+    var pu = {}, ec = {}, puPicks = 0, ecPicks = 0;
+    scopedMatches(sc).forEach(function(m){
+      [['home','H'], ['away','A']].forEach(function(pair){
+        var who = m[pair[0]], S = pair[1];
+        if(player && who !== player) return;
+        var won = S === 'H' ? m.sh > m.sa : m.sa > m.sh;
+        var p = m['pu'+S], e = m['ec'+S];
+        if(p){ if(!pu[p]) pu[p] = {picks:0, w:0}; pu[p].picks++; if(won) pu[p].w++; puPicks++; }
+        if(e){ if(!ec[e]) ec[e] = {picks:0, w:0}; ec[e].picks++; if(won) ec[e].w++; ecPicks++; }
+      });
+    });
+    return {pu:pu, ec:ec, puPicks:puPicks, ecPicks:ecPicks};
+  }
+
+  function selTable(map, games, label){
+    var keys = Object.keys(map).filter(function(k){ return map[k].picks > 0; })
+      .sort(function(a, b){ return map[b].picks - map[a].picks || a.localeCompare(b); });
+    if(!keys.length) return null;
+    return '<table><thead><tr><th>' + label + '</th><th>Picks</th><th>Share</th><th>Win rate</th></tr></thead><tbody>' +
+      keys.map(function(k){
+        var d = map[k];
+        var share = games ? Math.round(d.picks / games * 100) : 0;
+        var wr = d.picks ? Math.round(d.w / d.picks * 100) : 0;
+        return '<tr><td>' + esc(k) + '</td><td>' + d.picks +
+          '</td><td>' + share + '%</td><td>' + wr + '%</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function renderSelections(){
+    var st = selectionStats(null);
+    var puT = selTable(st.pu, st.puPicks, 'Power up');
+    var ecT = selTable(st.ec, st.ecPicks, 'Event card');
+    var pw = $('puWrap'), ew = $('ecWrap');
+    var none = scope === 'league' ? 'No power ups logged yet.' : 'No declarations in standard play yet.';
+    pw.className = puT ? '' : 'empty';
+    pw.innerHTML = puT ? puT + '<div class="note">Share is the slice of all ' + st.puPicks +
+      ' power ups declared' + (scope === 'league' ? ' this season' : ' in standard play') +
+      '. Win rate is how often that pick ended in a win.</div>' : none;
+    ew.className = ecT ? '' : 'empty';
+    ew.innerHTML = ecT || (scope === 'league' ? 'No event cards logged yet.' : none);
+
+    var head = ['Play','Scope','Type','Selection','Picks','SharePct','Wins','WinRatePct'];
+    var out = [];
+    function add(play, name, d){
+      [['Power up', d.pu, d.puPicks], ['Event card', d.ec, d.ecPicks]].forEach(function(t){
+        Object.keys(t[1]).forEach(function(k){
+          var v = t[1][k];
+          out.push([play, name, t[0], k, v.picks,
+            t[2] ? Math.round(v.picks / t[2] * 100) : 0,
+            v.w, Math.round(v.w / v.picks * 100)].join('\t'));
+        });
+      });
+    }
+    ['league','standard'].forEach(function(sc){
+      var label = sc === 'league' ? 'League' : 'Standard';
+      add(label, 'All players', selectionStats(null, sc));
+      league.players.forEach(function(p){ add(label, p, selectionStats(p, sc)); });
+    });
+    $('selExport').value = [head.join('\t')].concat(out).join('\n');
+  }
+
+  function renderMatchups(){
+    var pool = scope === 'league' ? members() : league.players;
+    var sel = $('mxPlayer'), keep = sel.value;
+    sel.innerHTML = pool.length
+      ? pool.map(function(p){ return '<option>' + esc(p) + '</option>'; }).join('')
+      : '<option value="">Add players in Setup</option>';
+    if(keep && pool.indexOf(keep) > -1) sel.value = keep;
+    var me = sel.value;
+
+    var opps = pool.filter(function(p){ return p !== me; });
+    if(!me || !opps.length){
+      $('mxProgress').innerHTML = '';
+      $('mxWrap').innerHTML = '<div class="empty">Add at least two players to build the series.</div>';
+      $('mxRemaining').className = 'empty';
+      $('mxRemaining').innerHTML = 'Nothing scheduled yet.';
+      $('mxExport').value = '';
+      return;
+    }
+
+    var isL = scope === 'league';
+    var req = league.cfg.req;
+    var rows = opps.map(function(o){
+      var s = pairStats(me, o, scope);
+      s.opp = o; s.left = Math.max(0, req - s.gp);
+      return s;
+    });
+
+    var totalGp = rows.reduce(function(n, s){ return n + s.gp; }, 0);
+    var need = seasonNeed();
+    var pct = need ? Math.round(totalGp / need * 100) : 0;
+    $('mxProgress').innerHTML = isL
+      ? '<div class="bar"><i style="width:' + Math.min(100, pct) + '%"></i></div>' +
+        '<div class="note" style="margin:6px 0 18px">' + esc(me) + ' has played ' + totalGp + ' of ' + need +
+        ' required games in ' + esc(seasonName()) + ' · ' + pct + '%</div>'
+      : '<div class="note" style="margin:0 0 18px">' + esc(me) + ' has played ' + totalGp +
+        ' all-time standard ' + (totalGp === 1 ? 'game' : 'games') + '. No season requirement applies.</div>';
+
+    $('mxWrap').innerHTML =
+      '<table><thead><tr><th>Opponent</th><th>GP</th><th>W</th><th>L</th><th>GF</th><th>GA</th><th>Y</th><th>R</th></tr></thead><tbody>' +
+      rows.map(function(s){
+        var cls = isL ? (s.gp >= req ? 'gp-done' : 'gp-short') : '';
+        var lead = s.w > s.l ? 'up' : (s.l > s.w ? 'down' : '');
+        return '<tr><td>' + avatarHTML(s.opp, 'avatar--sm') + esc(s.opp) + (lead ? '<span class="warn ' + lead + '">' +
+            (lead === 'up' ? 'leads the series' : 'trails the series') + '</span>' : '') + '</td>' +
+          '<td class="' + cls + '">' + s.gp + (isL ? '/' + req : '') + '</td><td>' + s.w + '</td><td>' + s.l + '</td>' +
+          '<td>' + s.gf + '</td><td>' + s.ga + '</td><td>' + s.y + '</td><td>' + s.r + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="note">Goals for and against, plus cards, are counted only in games against that opponent. 2Y&rarr;R and technicals ride along in the export.</div>';
+
+    var rem = $('mxRemaining');
+    if(!isL){
+      rem.className = 'empty';
+      rem.innerHTML = 'Standard play is an open-ended record — there is nothing to complete.';
+    } else {
+      var open = rows.filter(function(s){ return s.left > 0; })
+        .sort(function(a, b){ return b.left - a.left; });
+      if(!open.length){
+        rem.className = 'empty';
+        rem.innerHTML = esc(me) + ' has completed every series. Eligible for the month.';
+      } else {
+        rem.className = '';
+        rem.innerHTML = '<div class="chiprow">' + open.map(function(s){
+          return '<span class="chip">' + esc(s.opp) + ' <b style="color:var(--chalk)">' + s.left + ' left</b></span>';
+        }).join('') + '</div>';
+      }
+    }
+
+    var ms = selectionStats(me, scope);
+    var mp = selTable(ms.pu, ms.puPicks, 'Power up');
+    var me_ = selTable(ms.ec, ms.ecPicks, 'Event card');
+    var msel = $('mxSel');
+    if(!mp && !me_){
+      msel.className = 'empty';
+      msel.innerHTML = 'Nothing declared yet.';
+    } else {
+      msel.className = '';
+      msel.innerHTML = (mp || '') + (me_ ? '<div style="height:18px"></div>' + me_ : '') +
+        '<div class="note">Across ' + ms.puPicks + ' declared ' + (ms.puPicks === 1 ? 'game' : 'games') +
+        ' in ' + (isL ? 'league play' : 'standard play') +
+        '. Win rate shows how ' + esc(me) + ' fares with each selection.</div>';
+    }
+
+    var head = ['Play','Player','Opponent','GamesPlayed','GamesRequired','GamesLeft','W','L','GF','GA','GD','CleanSheets','Yellow','Red','SecondYellowReds','Tech','OwnGoals'];
+    var out = [];
+    ['league','standard'].forEach(function(sc){
+      var label = sc === 'league' ? 'League' : 'Standard';
+      league.players.forEach(function(p){
+        league.players.forEach(function(o){
+          if(p === o) return;
+          var st = pairStats(p, o, sc);
+          if(sc === 'standard' && !st.gp) return;
+          out.push([label, p, o, st.gp,
+            sc === 'league' ? req : '', sc === 'league' ? Math.max(0, req - st.gp) : '',
+            st.w, st.l, st.gf, st.ga, st.gd, st.cs, st.y, st.r, st.sy, st.t, st.og].join('\t'));
+        });
+      });
+    });
+    $('mxExport').value = [head.join('\t')].concat(out).join('\n');
+  }
+
+  function renderLog(){
+    var w = $('logWrap');
+    if(!league.matches.length){ w.innerHTML = '<div class="empty">No matches recorded yet.</div>'; }
+    else {
+      w.innerHTML = league.matches.slice(0, 40).map(function(m){
+        var win = m.sh > m.sa ? m.home : m.away, lose = m.sh > m.sa ? m.away : m.home;
+        var tags = [];
+        if(isStandard(m)) tags.push('Standard Binho');
+        else if(!m.official) tags.push('For fun');
+        if(m.sd) tags.push('Sudden death');
+        if(m.belt) tags.push('Belt');
+        if(m.mode && m.mode !== 'Standard') tags.push(m.mode);
+        if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
+        if((m.tH||0)+(m.tA||0)) tags.push('Technical');
+        if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
+        if(m.entry === 'manual') tags.push('Entered by hand');
+        return '<div class="log-item"><div><div class="who">' + esc(win) + ' beat ' + esc(lose) + '</div>' +
+          '<div class="tags">' + new Date(m.ts).toLocaleDateString(undefined,{month:'short',day:'numeric'}) +
+          (tags.length ? ' · ' + tags.join(' · ') : '') + '</div></div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' + Math.max(m.sh,m.sa) + '–' + Math.min(m.sh,m.sa) +
+          '<button class="log-x" data-del="' + m.id + '" aria-label="Delete match">×</button></div></div>';
+      }).join('');
+    }
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece'];
+    var rows = league.matches.map(function(m){
+      var win = m.sh > m.sa ? m.home : m.away;
+      var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
+      return [m.id, new Date(m.ts).toISOString().slice(0,10), isStandard(m)?'Standard':'League', m.home, m.away, m.sh, m.sa, win, m.sd?'Yes':'No', cs,
+        m.mode||'Standard', m.belt?'Yes':'No', m.official?'Yes':'No',
+        m.yH||0, m.rH||0, m.syH||0, m.tH||0, m.ogH||0, (m.rH||0) + (isStandard(m) ? 0 : (m.ogH||0)),
+        m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
+        m.htH||0, m.htA||0,
+        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||''].join('\t');
+    });
+    $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
+  }
+
+  function renderSeasons(){
+    var el = $('seasonList');
+    if(!league.archives.length){
+      el.className = 'empty';
+      el.innerHTML = 'No seasons closed yet.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = league.archives.slice(0, 12).map(function(a){
+      var when = new Date(a.closed).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+      var games = a.matches ? a.matches.length : 0;
+      return '<div class="log-item"><div><div class="who">' + esc(a.name || 'Season') + '</div>' +
+        '<div class="tags">Champion ' + esc(a.champion || '—') + ' · ' + games + ' ' + (games === 1 ? 'game' : 'games') + '</div></div>' +
+        '<div style="color:var(--dim)">' + when + '</div></div>';
+    }).join('');
+  }
+
+  function renderBelt(){
+    $('beltHolder').textContent = league.belt && league.belt.holder ? league.belt.holder : 'Vacant';
+  }
+
+  function renderCfg(){
+    $('cfgWin').value = league.cfg.winPts;
+    $('cfgCS').value = league.cfg.csPts;
+    $('cfgClock').value = league.cfg.clockMin;
+    $('cfgReq').value = league.cfg.req;
+    $('cfgLimit').value = league.cfg.scoreLimit;
+    $('cfgSd').value = league.cfg.sdScore;
+    $('cfgCount').value = league.cfg.countdown;
+    $('cfgSeason').value = league.cfg.seasonName || defaultSeason();
+    $('cfgVoice').checked = !!league.cfg.voice;
+  }
+
+  function renderAll(){ renderPlayers(); renderStandings(); renderSelections(); renderMatchups(); renderLog(); renderSeasons(); renderBelt(); renderCfg(); }
+
+  /* ---------------- wiring ---------------- */
+  document.querySelectorAll('nav button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('nav button').forEach(function(x){ x.classList.remove('on'); });
+      document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
+      b.classList.add('on');
+      $('v-' + b.dataset.tab).classList.add('on');
+    });
+  });
+
+  fillSelect($('puHome'), POWER_UPS, 'Choose…'); fillSelect($('puAway'), POWER_UPS, 'Choose…');
+  fillSelect($('ecHome'), EVENTS, 'Choose…'); fillSelect($('ecAway'), EVENTS, 'Choose…');
+  fillSelect($('selMode'), MODES);
+
+  $('startBtn').addEventListener('click', startMatch);
+  $('manualBtn').addEventListener('click', openManual);
+  $('mType').addEventListener('change', manualType);
+  $('mStdDecl').addEventListener('change', manualType);
+  $('mHome').addEventListener('change', manualNames);
+  $('mAway').addEventListener('change', manualNames);
+  $('mSaveBtn').addEventListener('click', saveManual);
+  $('mCancelBtn').addEventListener('click', function(){ $('manualVeil').classList.remove('open'); });
+
+  function openRules(){ $('rulesVeil').classList.add('open'); }
+  $('rulesBtn').addEventListener('click', openRules);
+  $('rulesBtn2').addEventListener('click', openRules);
+  $('rulesCloseBtn').addEventListener('click', function(){ $('rulesVeil').classList.remove('open'); });
+
+  document.querySelectorAll('#typeSeg button').forEach(function(b){
+    b.addEventListener('click', function(){
+      gameType = b.dataset.type;
+      document.querySelectorAll('#typeSeg button').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      var std = gameType === 'standard';
+      $('leagueExtra').style.display = std ? 'none' : 'block';
+      $('stdOnly').style.display = std ? 'block' : 'none';
+      $('declBlock').style.display = (!std || $('stdDecl').checked) ? 'block' : 'none';
+      $('declHead').textContent = std ? 'Declarations — optional extras' : 'Pregame declarations — required';
+      renderPlayers();
+      $('pregameSub').textContent = std
+        ? 'Official Binho rules, tracked on its own. Nothing here touches the season.'
+        : 'Pick both players and declare selections before the opening flick.';
+    });
+  });
+  $('tapHome').addEventListener('click', function(){ goal('home'); });
+  $('tapAway').addEventListener('click', function(){ goal('away'); });
+  document.querySelectorAll('[data-minus]').forEach(function(b){ b.addEventListener('click', function(){ minus(b.dataset.minus); }); });
+  document.querySelectorAll('[data-own]').forEach(function(b){
+    b.addEventListener('click', function(){ ownGoal(b.dataset.own); });
+  });
+  document.querySelectorAll('[data-mark]').forEach(function(b){
+    b.addEventListener('click', function(){ var p = b.dataset.mark.split(':'); mark(p[0], p[1]); });
+  });
+  $('undoBtn').addEventListener('click', undo);
+  $('clock').addEventListener('click', toggleClock);
+  $('endBtn').addEventListener('click', endGame);
+  $('sdGoBtn').addEventListener('click', resumeSD);
+
+  document.querySelectorAll('[data-ht]').forEach(function(b){
+    b.addEventListener('click', function(){
+      if(!game) return;
+      var p = b.dataset.ht.split(':'), key = p[0] === 'home' ? 'htH' : 'htA';
+      game[key] = Math.max(0, game[key] + parseInt(p[1], 10));
+      $(p[0] === 'home' ? 'htHome' : 'htAway').textContent = game[key];
+    });
+  });
+  $('recSaveBtn').addEventListener('click', saveMatch);
+  $('recBackBtn').addEventListener('click', function(){
+    $('recVeil').classList.remove('open');
+    if(game){ game.over = false; renderLive(); }
+  });
+
+  $('addPlayerBtn').addEventListener('click', function(){
+    if(!requireManage()) return;
+    var n = $('newPlayer').value.trim();
+    if(!n) return;
+    if(league.players.indexOf(n) > -1){ toast('Already on the roster'); return; }
+    $('newPlayer').value = '';
+    commit(function(db){
+      db.players.push(n);
+      if(!Array.isArray(db.members)) db.members = [];
+      db.members.push(n);
+    });
+  });
+  $('newPlayer').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('addPlayerBtn').click(); });
+
+  var photoTarget = null;
+  $('playerChips').addEventListener('click', function(e){
+    var photo = e.target.closest('[data-photo]');
+    if(photo){ photoTarget = photo.dataset.photo; $('photoInput').click(); return; }
+
+    var mem = e.target.closest('[data-member]');
+    if(mem){
+      if(!requireManage()) return;
+      var name = mem.dataset.member;
+      commit(function(db){
+        if(!Array.isArray(db.members)) db.members = db.players.slice();
+        var i = db.members.indexOf(name);
+        if(i > -1) db.members.splice(i, 1); else db.members.push(name);
+      });
+    }
+  });
+
+  $('signBtn').addEventListener('click', async function(){
+    var entry = $('passInput').value.trim();
+    if(!entry){ toast('Enter your passcode'); return; }
+    $('passInput').value = '';
+    var res = await api({ action:'login', code:entry });
+    if(!res) return;
+    role = res.role;
+    token = res.token;
+    if(res.newAdmin){
+      showRecovery(res.newAdmin, 'New admin passcode');
+      toast('Recovery accepted — passcodes reissued');
+      setTimeout(function(){ showRecovery(res.newRecovery, 'New recovery code'); }, 15000);
+    } else {
+      toast('Signed in as ' + role);
+    }
+    renderAll();
+  });
+
+  $('signOutBtn').addEventListener('click', async function(){
+    await api({ action:'logout', token:token });
+    role = 'guest';
+    token = null;
+    $('recoveryBox').style.display = 'none';
+    renderAll();
+    toast('Signed out');
+  });
+
+  $('managerPassBtn').addEventListener('click', async function(){
+    if(!requireAdmin()) return;
+    var code = prompt('Manager passcode — at least four characters. Leave blank to remove manager access.');
+    if(code === null) return;
+    code = code.trim();
+    if(code && code.length < 4){ toast('Use at least four characters'); return; }
+    var res = await api({ action:'passcode', which:'manager', code:code, token:token });
+    if(res) toast(code ? 'Manager passcode set' : 'Manager access removed');
+  });
+
+  $('recoveryBtn').addEventListener('click', async function(){
+    if(!requireAdmin()) return;
+    var res = await api({ action:'passcode', which:'recovery', token:token });
+    if(res && res.recovery) showRecovery(res.recovery, 'New recovery code');
+  });
+
+  $('changePassBtn').addEventListener('click', async function(){
+    if(!requireAdmin()) return;
+    var code = prompt('New admin passcode (at least six characters)');
+    if(code === null) return;
+    code = code.trim();
+    if(code.length < 6){ toast('Use at least six characters'); return; }
+    var res = await api({ action:'passcode', which:'admin', code:code, token:token });
+    if(res) toast('Admin passcode changed');
+  });
+  $('photoInput').addEventListener('change', function(){
+    var file = this.files && this.files[0];
+    this.value = '';
+    if(!file || !photoTarget) return;
+    readPhoto(file, function(dataUrl){ savePhoto(photoTarget, dataUrl); });
+  });
+
+  $('selHome').addEventListener('change', updatePregame);
+  $('selAway').addEventListener('change', updatePregame);
+
+  $('playerChips').addEventListener('click', function(e){
+    var b = e.target.closest('[data-rm]'); if(!b) return;
+    var n = b.dataset.rm;
+    if(!requireManage()) return;
+    if(!confirm('Remove ' + n + ' from the roster? Recorded matches keep their name.')) return;
+    commit(function(db){
+      db.players = db.players.filter(function(p){ return p !== n; });
+      if(Array.isArray(db.members)) db.members = db.members.filter(function(p){ return p !== n; });
+    });
+  });
+
+  $('logWrap').addEventListener('click', function(e){
+    var b = e.target.closest('[data-del]'); if(!b) return;
+    if(!requireManage()) return;
+    if(!confirm('Delete this match from the league record?')) return;
+    commit(function(db){ db.matches = db.matches.filter(function(m){ return m.id !== b.dataset.del; }); });
+  });
+
+  $('saveCfgBtn').addEventListener('click', function(){
+    if(!requireManage()) return;
+    commit(function(db){
+      db.cfg.winPts = Math.max(1, +$('cfgWin').value || 3);
+      db.cfg.csPts = Math.max(0, +$('cfgCS').value || 0);
+      db.cfg.clockMin = Math.max(0, +$('cfgClock').value || 0);
+      db.cfg.req = Math.max(1, +$('cfgReq').value || 20);
+      db.cfg.scoreLimit = Math.max(0, +$('cfgLimit').value || 0);
+      db.cfg.sdScore = Math.max(0, +$('cfgSd').value || 0);
+      db.cfg.countdown = Math.max(0, Math.min(10, +$('cfgCount').value || 0));
+      db.cfg.voice = $('cfgVoice').checked;
+      db.cfg.seasonName = $('cfgSeason').value.trim() || defaultSeason();
+    });
+    toast('Settings saved');
+  });
+
+  $('testCountBtn').addEventListener('click', function(){
+    league.cfg.countdown = Math.max(0, Math.min(10, +$('cfgCount').value || 0));
+    league.cfg.voice = $('cfgVoice').checked;
+    countdown(function(){});
+  });
+
+  $('archiveBtn').addEventListener('click', function(){
+    if(!requireAdmin()) return;
+    var ms = leagueMatches();
+    if(!ms.length){ toast('No league games to close out'); return; }
+    var final = standingsRows(ms, true);
+    var champ = (final[0] || {}).name || '';
+    if(!confirm('Close ' + seasonName() + ' and crown ' + (champ || 'nobody') +
+      '? League standings reset. Standard play is untouched.')) return;
+    commit(function(db){
+      db.archives.unshift({
+        name: db.cfg.seasonName || defaultSeason(),
+        closed: Date.now(),
+        champion: champ,
+        table: final.map(function(x){
+          return {name:x.name, gp:x.gp, w:x.w, l:x.l, gf:x.gf, ga:x.ga, gd:x.gd, cs:x.cs, pts:x.pts};
+        }),
+        matches: db.matches.filter(function(m){ return !isStandard(m); })
+      });
+      db.matches = db.matches.filter(isStandard);
+      db.cfg.seasonName = defaultSeason();
+    });
+    toast(champ ? champ + ' takes the season' : 'Season closed');
+  });
+
+  $('wipeBtn').addEventListener('click', function(){
+    if(!requireAdmin()) return;
+    if(!confirm('Erase every player, match, and archive for the whole league? This cannot be undone.')) return;
+    commit(function(db){
+      var fresh = blank();
+      db.players = fresh.players; db.members = []; db.matches = fresh.matches;
+      db.belt = null; db.archives = []; db.cfg = fresh.cfg;
+    });
+    toast('League erased');
+  });
+
+  $('selCopyBtn').addEventListener('click', function(){
+    var text = $('selExport').value;
+    if(!text){ toast('Nothing to copy yet'); return; }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ toast('Selection stats copied'); },
+        function(){ $('selExport').select(); toast('Select and copy the box'); });
+    } else { $('selExport').select(); toast('Select and copy the box'); }
+  });
+
+  function setScope(next){
+    scope = next;
+    ['#scopeSeg', '#mxScopeSeg'].forEach(function(sel){
+      document.querySelectorAll(sel + ' button').forEach(function(b){
+        b.classList.toggle('on', b.dataset.scope === next);
+      });
+    });
+    renderStandings(); renderSelections(); renderMatchups();
+  }
+  document.querySelectorAll('#scopeSeg button, #mxScopeSeg button').forEach(function(b){
+    b.addEventListener('click', function(){ setScope(b.dataset.scope); });
+  });
+
+  $('mxPlayer').addEventListener('change', renderMatchups);
+  $('stdDecl').addEventListener('change', function(){
+    $('declBlock').style.display = $('stdDecl').checked ? 'block' : 'none';
+  });
+
+  $('mxCopyBtn').addEventListener('click', function(){
+    var text = $('mxExport').value;
+    if(!text){ toast('Nothing to copy yet'); return; }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ toast('Pairings copied'); },
+        function(){ $('mxExport').select(); toast('Select and copy the box'); });
+    } else { $('mxExport').select(); toast('Select and copy the box'); }
+  });
+
+  $('copyBtn').addEventListener('click', function(){
+    var text = $('exportBox').value;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ toast('Rows copied'); },
+        function(){ $('exportBox').select(); toast('Select and copy the box'); });
+    } else { $('exportBox').select(); toast('Select and copy the box'); }
+  });
+
+  boot();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){ /* the offline shell is optional */ });
+    });
+  }
+})();
+</script>
+</body>
+</html>
