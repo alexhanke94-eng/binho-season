@@ -48,6 +48,8 @@
   main{overflow:auto;position:relative;-webkit-overflow-scrolling:touch}
   .view{display:none;min-height:100%}
   .view.on{display:block}
+  /* board view fills the screen so .board's 1fr rows resolve; other views keep min-height and scroll */
+  #v-board.on{height:100%}
   .pad{padding:18px 16px 28px}
 
   h2{font-family:var(--display);font-weight:700;font-size:1.4rem;letter-spacing:.14em;text-transform:uppercase;margin:0 0 4px}
@@ -81,7 +83,8 @@
 
   .board{display:grid;grid-template-rows:1fr auto 1fr;height:100%}
   .side{position:relative;overflow:hidden;background:repeating-linear-gradient(90deg,var(--turf) 0 42px,var(--turf-2) 42px 84px)}
-  .side--away{transform:rotate(180deg)}
+  .side--away .side__in{flex-direction:column-reverse}
+  .side--away .side__tools{top:0;bottom:auto}
   .side__tap{position:absolute;inset:0;width:100%;height:100%}
   .side__glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 100%,var(--accent) 0,transparent 62%);opacity:.10}
   .side__in{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;pointer-events:none}
@@ -90,7 +93,7 @@
   .pscore{font-family:var(--display);font-weight:800;font-size:clamp(4rem,20vw,7rem);line-height:.85;font-variant-numeric:tabular-nums;transition:transform .18s cubic-bezier(.2,1.4,.4,1)}
   .side.pop .pscore{transform:scale(1.12)}
   .side.pop .side__glow{opacity:.3;transition:opacity .35s}
-  .marks{display:flex;gap:5px;align-items:center;min-height:22px;margin-top:6px}
+  .marks{position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:2;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding-left:8px;pointer-events:none}
   .card{width:13px;height:18px;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
   .card--y{background:var(--yellow)} .card--r{background:var(--red)}
   .card--t{background:var(--chalk);width:13px;height:13px;border-radius:50%}
@@ -303,8 +306,8 @@
             <div id="avLiveAway"></div>
             <div class="pname" id="liveAway">Away</div>
             <div class="pscore" id="scoreAway">0</div>
-            <div class="marks" id="marksAway"></div>
           </div>
+          <div class="marks" id="marksAway"></div>
           <div class="side__tools">
             <button class="tool" data-minus="away">Goal −1</button>
             <button class="tool tool--og" data-own="away">Own goal</button>
@@ -331,8 +334,8 @@
             <div id="avLiveHome"></div>
             <div class="pname" id="liveHome">Home</div>
             <div class="pscore" id="scoreHome">0</div>
-            <div class="marks" id="marksHome"></div>
           </div>
+          <div class="marks" id="marksHome"></div>
           <div class="side__tools">
             <button class="tool" data-minus="home">Goal −1</button>
             <button class="tool tool--og" data-own="home">Own goal</button>
@@ -490,9 +493,6 @@
     <h3>Season record</h3>
     <div class="check" id="recOfficialRow"><input type="checkbox" id="recOfficial" checked><label for="recOfficial" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Office game — counts toward the season</label></div>
     <div class="note" id="recStdNote" style="display:none">Filed under standard play. It won't touch league standings, head to head, or selection stats.</div>
-    <div class="stepper"><span id="htHomeLabel">Home hat tricks</span><div><button data-ht="home:-1">−</button><span id="htHome">0</span><button data-ht="home:1">+</button></div></div>
-    <div class="stepper"><span id="htAwayLabel">Away hat tricks</span><div><button data-ht="away:-1">−</button><span id="htAway">0</span><button data-ht="away:1">+</button></div></div>
-    <div class="field" style="margin-top:14px"><label>MVP piece</label><input type="text" id="recMvp" placeholder="e.g. left winger peg" maxlength="40"></div>
     <button class="btn btn--go" id="recSaveBtn" style="margin-top:8px">Record match</button>
     <button class="btn btn--ghost" id="recBackBtn" style="margin-top:10px">Back to the board</button>
   </div>
@@ -560,13 +560,8 @@
 
       <label for="mOgH">Own goals</label>
       <input type="number" id="mOgH" min="0" max="20" value="0"><input type="number" id="mOgA" min="0" max="20" value="0">
-
-      <label for="mHtH">Hat tricks</label>
-      <input type="number" id="mHtH" min="0" max="20" value="0"><input type="number" id="mHtA" min="0" max="20" value="0">
     </div>
     <div class="note" id="mDerived">Pegs lost calculates itself from reds and own goals.</div>
-
-    <div class="field" style="margin-top:14px"><label>MVP piece</label><input type="text" id="mMvp" maxlength="40" placeholder="e.g. left winger peg"></div>
 
     <button class="btn btn--go" id="mSaveBtn" style="margin-top:8px">Record match</button>
     <button class="btn btn--ghost" id="mCancelBtn" style="margin-top:10px">Cancel</button>
@@ -1070,12 +1065,24 @@
   // own goal: counts for the opponent, restart from center
   function ownGoal(by){
     if(!game || game.over) return;
+    var isLeague = !game.std;
+    // freeze the clock the moment it happens so the confirmation isn't racing it
+    if(isLeague){ stopClock(); game.running = false; }
     snap();
     game['og' + (by === 'home' ? 'H' : 'A')]++;
-    toast(game.std
-      ? 'Own goal — counts for ' + (by === 'home' ? game.away : game.home)
-      : 'Own goal — counts for ' + (by === 'home' ? game.away : game.home) + ', remove one of your players');
+    var offender = by === 'home' ? game.home : game.away;
+    var opponent = by === 'home' ? game.away : game.home;
+    if(game.std) toast('Own goal — counts for ' + opponent);
     applyGoal(by === 'home' ? 'away' : 'home');
+    // league own goal: pause on a confirmation, resume the clock on accept.
+    // skip it if the goal already ended the match or tipped into sudden death.
+    if(isLeague && game && !game.over && !$('sdVeil').classList.contains('open')){
+      showSD('Own goal',
+        offender + ' scored an own goal',
+        'It counts for ' + opponent + '. ' + offender +
+        ' takes one of their own field pegs off the board, then press play to restart the clock.',
+        'Resume the clock');
+    }
   }
 
   function minus(side){
@@ -1212,11 +1219,6 @@
     $('recTags').textContent = tags.join(' · ');
     $('recOfficialRow').style.display = game.std ? 'none' : 'flex';
     $('recStdNote').style.display = game.std ? 'block' : 'none';
-    $('htHomeLabel').textContent = game.home + ' hat tricks';
-    $('htAwayLabel').textContent = game.away + ' hat tricks';
-    game.htH = 0; game.htA = 0;
-    $('htHome').textContent = '0'; $('htAway').textContent = '0';
-    $('recMvp').value = '';
     $('recOfficial').checked = true;
     $('recVeil').classList.add('open');
     renderLive();
@@ -1230,7 +1232,7 @@
       home:g.home, away:g.away, sh:g.sh, sa:g.sa,
       sd:g.sd, mode:g.mode, belt:g.belt, type: g.std ? 'standard' : 'league',
       yH:g.yH, yA:g.yA, rH:g.rH, rA:g.rA, tH:g.tH, tA:g.tA, syH:g.syH, syA:g.syA,
-      htH:g.htH, htA:g.htA, ogH:g.ogH, ogA:g.ogA, mvp:$('recMvp').value.trim(),
+      htH:0, htA:0, ogH:g.ogH, ogA:g.ogA, mvp:'',
       puH:g.puH, puA:g.puA, ecH:g.ecH, ecA:g.ecA,
       official: g.std ? false : $('recOfficial').checked
     };
@@ -1263,9 +1265,8 @@
     $('mDate').value = d.getFullYear() + '-' +
       ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
     $('mType').value = gameType;
-    ['mSH','mSA','mYH','mYA','mSyH','mSyA','mSrH','mSrA','mTH','mTA','mOgH','mOgA','mHtH','mHtA']
+    ['mSH','mSA','mYH','mYA','mSyH','mSyA','mSrH','mSrA','mTH','mTA','mOgH','mOgA']
       .forEach(function(id){ $(id).value = 0; });
-    $('mMvp').value = '';
     $('mSD').checked = false;
     $('mBelt').checked = false;
     $('mOfficial').checked = true;
@@ -1348,8 +1349,8 @@
       rH: n('mSyH') + n('mSrH'), rA: n('mSyA') + n('mSrA'),
       tH: n('mTH'), tA: n('mTA'),
       ogH: n('mOgH'), ogA: n('mOgA'),
-      htH: n('mHtH'), htA: n('mHtA'),
-      mvp: $('mMvp').value.trim(),
+      htH: 0, htA: 0,
+      mvp: '',
       puH: decl ? $('mPuH').value : '', puA: decl ? $('mPuA').value : '',
       ecH: decl ? $('mEcH').value : '', ecA: decl ? $('mEcA').value : '',
       official: std ? false : $('mOfficial').checked,
@@ -1494,12 +1495,10 @@
         }).join('') + '</tbody></table>';
     }
 
-    var ht = rows.slice().sort(function(a,b){ return b.ht - a.ht; })[0];
     var sc = rows.slice().sort(function(a,b){ return b.gf - a.gf; })[0];
     var cl = rows.slice().sort(function(a,b){ return b.cs - a.cs; })[0];
     var bits = [];
     if(sc && sc.gf) bits.push('Top scorer — ' + esc(sc.name) + ' (' + sc.gf + ')');
-    if(ht && ht.ht) bits.push('Hat tricks — ' + esc(ht.name) + ' (' + ht.ht + ')');
     if(cl && cl.cs) bits.push('Clean sheets — ' + esc(cl.name) + ' (' + cl.cs + ')');
     var og = rows.slice().sort(function(a,b){ return b.og - a.og; })[0];
     if(og && og.og) bits.push('Own goals — ' + esc(og.name) + ' (' + og.og + ')');
@@ -1834,14 +1833,6 @@
   $('endBtn').addEventListener('click', endGame);
   $('sdGoBtn').addEventListener('click', resumeSD);
 
-  document.querySelectorAll('[data-ht]').forEach(function(b){
-    b.addEventListener('click', function(){
-      if(!game) return;
-      var p = b.dataset.ht.split(':'), key = p[0] === 'home' ? 'htH' : 'htA';
-      game[key] = Math.max(0, game[key] + parseInt(p[1], 10));
-      $(p[0] === 'home' ? 'htHome' : 'htAway').textContent = game[key];
-    });
-  });
   $('recSaveBtn').addEventListener('click', saveMatch);
   $('recBackBtn').addEventListener('click', function(){
     $('recVeil').classList.remove('open');
