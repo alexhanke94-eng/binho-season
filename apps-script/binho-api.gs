@@ -58,15 +58,24 @@ function setup(){
 /* ============================ routing ============================ */
 
 function doPost(e){
-  var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(25000);
     var body = JSON.parse(e.postData.contents || '{}');
-    return json_(route_(body));
+    var action = body.action || '';
+    // Reads never take the lock, so they stop queueing behind writes.
+    if(action === 'state' || action === 'photos'){
+      return json_(route_(body));
+    }
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(25000);
+      var out = route_(body);
+      invalidateState_();   // a write may have changed things — drop the cached state
+      return json_(out);
+    } finally {
+      try { lock.releaseLock(); } catch (ignore) {}
+    }
   } catch (err) {
     return json_({ ok:false, error:String(err) });
-  } finally {
-    try { lock.releaseLock(); } catch (ignore) {}
   }
 }
 
@@ -78,7 +87,8 @@ function route_(body){
   var action = body.action || '';
 
   switch(action){
-    case 'state':       return { ok:true, state: readState_() };
+    case 'state':       return { ok:true, state: cachedState_() };
+    case 'photos':      return { ok:true, photos: readPhotos_() };   // full map, pulled only when photoVersion changes
     case 'login':       return login_(body.code);
     case 'logout':      return logout_(body.token);
     case 'match':       return recordMatch_(body.match);          // guest
@@ -195,20 +205,50 @@ function blankState_(){
   };
 }
 
+var STATE_CACHE_KEY = 'state_v2';
+var STATE_CACHE_SEC = 15;
+
+// A burst of reads hits the sheet once and everyone else gets the cached copy.
+function cachedState_(){
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get(STATE_CACHE_KEY);
+  if(hit){ try { return JSON.parse(hit); } catch(ignore){} }
+  var state = readState_();
+  try { cache.put(STATE_CACHE_KEY, JSON.stringify(state), STATE_CACHE_SEC); } catch(ignore){}
+  return state;
+}
+
+function invalidateState_(){
+  try { CacheService.getScriptCache().remove(STATE_CACHE_KEY); } catch(ignore){}
+}
+
 function readState_(){
   var sheet = getStateSheet_();
   var raw = sheet.getRange('A1').getValue();
   var state = raw ? JSON.parse(raw) : blankState_();
   state.matches = readMatches_();
-  state.photos = readPhotos_();
+  state.photoVersion = photoVersion_();   // the photos themselves come from the 'photos' action
   state.hasManager = !!PropertiesService.getScriptProperties().getProperty('managerHash');
   return state;
 }
 
+// A short fingerprint of the photo set — player name plus image length — so the client
+// can tell when any photo changed without pulling the images on every state read.
+function photoVersion_(){
+  var rows = getPhotoSheet_().getDataRange().getValues();
+  var parts = [];
+  rows.forEach(function(r){ if(r[0]) parts.push(r[0] + ':' + String(r[1] == null ? '' : r[1]).length); });
+  if(!parts.length) return '0';
+  parts.sort();
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, parts.join('|'), Utilities.Charset.UTF_8);
+  return digest.map(function(b){ return ((b & 0xFF) + 0x100).toString(16).slice(1); }).join('').slice(0, 12);
+}
+
 function writeState_(state){
   var copy = JSON.parse(JSON.stringify(state));
-  delete copy.matches;    // matches live in the Log sheet
-  delete copy.photos;     // photos live in the Photos sheet
+  delete copy.matches;        // matches live in the Log sheet
+  delete copy.photos;         // photos live in the Photos sheet
+  delete copy.photoVersion;   // derived, never stored
   delete copy.hasManager;
   getStateSheet_().getRange('A1').setValue(JSON.stringify(copy));
 }

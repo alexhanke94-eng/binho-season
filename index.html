@@ -166,6 +166,12 @@
     background:var(--red);color:#fff;font-family:var(--mono);font-size:.64rem;
     letter-spacing:.08em;text-align:center;line-height:1.5;
   }
+  .queued{
+    position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:36;display:none;
+    background:var(--turf-2);border:1px solid var(--line);color:var(--dim);border-radius:999px;
+    padding:6px 13px;font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;white-space:nowrap;
+  }
+  .queued.on{display:block}
   .toast{
     position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:40;
     background:var(--chalk);color:var(--turf);border-radius:999px;padding:10px 18px;
@@ -684,6 +690,7 @@
   <small id="countLbl">Hands off the board</small>
 </div>
 
+<div class="queued" id="queued"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -714,45 +721,219 @@
   function blank(){ return { players:[], members:[], matches:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:''} }; }
 
   var API = (window.BINHO_CONFIG && window.BINHO_CONFIG.apiUrl) || '';
-  var token = null;
 
   function banner(msg){
     var el = $('banner');
+    if(!el) return;
     if(!msg){ el.style.display = 'none'; return; }
     el.style.display = 'block';
     el.textContent = msg;
   }
 
-  // text/plain keeps this a simple request, so the browser skips the preflight
-  // that Apps Script cannot answer
-  async function api(payload){
-    if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
-    try {
-      var res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
-      var data = await res.json();
-      if(!data.ok){
-        toast(data.error || 'The league server refused that');
-        return null;
-      }
-      banner('');
-      $('syncNote').textContent = 'Last synced ' + new Date().toLocaleTimeString();
-      return data;
-    } catch(err){
-      banner('Cannot reach the league server. Changes are not being saved.');
-      return null;
-    }
+  // 'ok' clears the banner; 'retrying' is the gentle transient state (data is cached or a
+  // write is safely queued); 'offline' is the rare case where a change could not be saved.
+  function setConnection(state){
+    if(state === 'ok') banner('');
+    else if(state === 'offline') banner('Can’t reach the league server — a change could not be saved. Check your connection.');
+    else banner('Reconnecting…');
   }
+  function synced(){ var el = $('syncNote'); if(el) el.textContent = 'Last synced ' + new Date().toLocaleTimeString(); }
+
+  /*
+   * The one door to the backend. Nothing outside this object calls fetch or knows it is
+   * talking to Apps Script. It owns retry/backoff, the localStorage caches (state + photos),
+   * and the offline write queue that replays on reconnect.
+   */
+  var Api = (function(){
+    var token = null, flushing = false;
+    var SKEY = 'binho_state', PKEY = 'binho_photos', QKEY = 'binho_queue';
+    var BACKOFF = [400, 1200, 2500];
+
+    function ls(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }
+    function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
+    function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+    function rawPost(payload){
+      return fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request, skips preflight
+        body: JSON.stringify(payload)
+      }).then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); });
+    }
+
+    // Retry only on a transport failure. A server that answers (even ok:false) counts as reached.
+    async function attempt(payload){
+      var err;
+      for(var i = 0; i <= BACKOFF.length; i++){
+        if(i > 0) await sleep(BACKOFF[i - 1]);
+        try { return await rawPost(payload); }
+        catch(e){ err = e; }
+      }
+      throw err || new Error('network');
+    }
+
+    function queue(){ return ls(QKEY) || []; }
+    function setQueue(q){ return save(QKEY, q); }
+    function queuedCount(){ return queue().length; }
+    function updateQueued(){
+      var n = queuedCount(), el = $('queued');
+      if(!el) return;
+      el.textContent = n ? ('↻ ' + n + ' change' + (n > 1 ? 's' : '') + ' waiting to sync') : '';
+      el.classList.toggle('on', n > 0);
+    }
+    function enqueue(payload){ var q = queue(); q.push(payload); var ok = setQueue(q); updateQueued(); return ok; }
+
+    // A human-readable name for a queued write, used when we have to report that it failed.
+    function describe(p){
+      switch(p.action){
+        case 'match':       return 'the ' + (p.match ? (p.match.home + ' vs ' + p.match.away) : 'match') + ' result';
+        case 'deleteMatch': return 'a deleted match';
+        case 'roster':      return 'the roster change';
+        case 'settings':    return 'the settings change';
+        case 'season':      return 'ending the season';
+        case 'wipe':        return 'erasing the league';
+        case 'photo':       return (p.name ? p.name + '’s photo' : 'a photo');
+        case 'passcode':    return 'the passcode change';
+        default:            return 'a change';
+      }
+    }
+
+    // Guests may always record a match or set a photo, so those can never legitimately be
+    // refused for permissions. If one somehow is, don't echo sign-in / roster copy that would
+    // not apply to the caller — say something honest instead. Genuine validation reasons
+    // (e.g. "Match is missing players") still pass through.
+    var GUEST_ALWAYS = { match: 1, photo: 1 };
+    function reasonFor(p, error){
+      var e = (error || '').replace(/\s*\.\s*$/, '');   // trim a trailing period; the toast adds its own
+      var permissionish = /\b(sign in|session|manager|admin|access|permission|needs?)\b/i.test(e);
+      if(GUEST_ALWAYS[p.action] && permissionish) return 'the server unexpectedly refused it';
+      return e || 'the server refused it';
+    }
+
+    async function flush(){
+      if(flushing || !API) return;
+      flushing = true;
+      var rejected = [];
+      try {
+        var q = queue();
+        while(q.length){
+          var payload = token ? Object.assign({}, q[0], { token: token }) : q[0];
+          var data;
+          try { data = await rawPost(payload); }
+          catch(e){ break; }                        // still offline — keep the queue for next time
+          var item = q.shift(); setQueue(q);        // reached the server; MatchID dedupe makes replays safe
+          if(data && data.ok){ if(data.state){ applyState(data.state); renderAll(); } }
+          else rejected.push({ item: item, error: (data && data.error) || 'the server rejected it' });
+        }
+        updateQueued();
+        if(rejected.length){
+          // A queued write was refused (e.g. a session that expired before it replayed). Roll the
+          // optimistic change back to what the server actually holds, then say what failed and why —
+          // silent divergence between the screen and the server is worse than being slow.
+          var fresh = await getState();
+          if(fresh){ applyState(fresh); renderAll(); }
+          rejected.forEach(function(r){ toast('Couldn’t save ' + describe(r.item) + ' — ' + reasonFor(r.item, r.error) + '. Change undone.'); });
+        }
+        setConnection(queue().length ? 'retrying' : 'ok');
+        if(!queue().length) synced();
+      } finally { flushing = false; }
+    }
+
+    function onReached(){ setConnection('ok'); synced(); if(queuedCount()) flush(); }
+
+    async function getState(){
+      if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
+      try {
+        var data = await attempt({ action: 'state' });
+        if(data && data.ok && data.state){ save(SKEY, data.state); onReached(); return data.state; }
+        if(data && data.error) toast(data.error);
+        return null;
+      } catch(e){ setConnection('retrying'); return null; }
+    }
+    async function getPhotos(){
+      if(!API) return null;
+      try { var data = await attempt({ action: 'photos' }); return data && data.ok ? (data.photos || {}) : null; }
+      catch(e){ return null; }
+    }
+
+    async function write(payload){
+      if(!API) return { refused: true, error: 'No API URL set' };
+      var body = token ? Object.assign({}, payload, { token: token }) : payload;
+      try {
+        var data = await attempt(body);
+        if(data && data.ok){ onReached(); return { ok: true, state: data.state, data: data }; }
+        setConnection('ok');   // reached the server; it simply refused (permission / validation)
+        return { refused: true, error: (data && data.error) || 'The league server refused that' };
+      } catch(e){
+        var ok = enqueue(payload);
+        setConnection(ok ? 'retrying' : 'offline');
+        return ok ? { queued: true } : { offline: true, error: 'Could not save your change' };
+      }
+    }
+
+    return {
+      setToken: function(t){ token = t; },
+      clearToken: function(){ token = null; },
+      cachedState: function(){ return ls(SKEY); },
+      photoCache: function(){ return ls(PKEY); },
+      savePhotoCache: function(v, map){ save(PKEY, { v: v, map: map }); },
+      queuedCount: queuedCount,
+      refreshQueued: updateQueued,
+      flush: flush,
+      getState: getState,
+      getPhotos: getPhotos,
+      push: write,
+      recordMatch: function(m){ return write({ action: 'match', match: m }); },
+      deleteMatch: function(id){ return write({ action: 'deleteMatch', id: id }); },
+      saveRoster: function(players, mem){ return write({ action: 'roster', players: players, members: mem }); },
+      saveSettings: function(cfg){ return write({ action: 'settings', cfg: cfg }); },
+      endSeason: function(a){ return write({ action: 'season', name: a.name, champion: a.champion, table: a.table }); },
+      wipe: function(){ return write({ action: 'wipe' }); },
+      setPasscode: function(which, code){ return write({ action: 'passcode', which: which, code: code }); },
+      savePhoto: function(name, image){ return write({ action: 'photo', name: name, image: image }); },
+      login: async function(code){
+        if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
+        try {
+          var data = await attempt({ action: 'login', code: code });
+          if(data && data.ok){ token = data.token; onReached(); return data; }
+          if(data) toast(data.error || 'Passcode not recognised');
+          return null;
+        } catch(e){ setConnection('retrying'); toast('Could not reach the server to sign in'); return null; }
+      },
+      logout: async function(){
+        var t = token; token = null;
+        if(t && API){ try { await attempt({ action: 'logout', token: t }); } catch(e){} }
+        return true;
+      }
+    };
+  })();
 
   function applyState(state){
     if(!state) return;
     league = Object.assign(blank(), state);
     league.cfg = Object.assign(blank().cfg, state.cfg || {});
     if(!Array.isArray(league.members)) league.members = league.players.slice();
-    avatars = state.photos || {};
+    reconcilePhotos(state);
+  }
+
+  // Photos are cached in localStorage keyed by photoVersion; the full map is pulled only
+  // when that version changes. Falls back to inline photos if an older server still sends them.
+  function reconcilePhotos(state){
+    if(state.photos){                        // older server inlined them — use directly
+      avatars = state.photos;
+      Api.savePhotoCache(state.photoVersion || 'inline', state.photos);
+      return;
+    }
+    var v = state.photoVersion || '0';
+    var cache = Api.photoCache();
+    if(cache && cache.map) avatars = cache.map;    // show something now, no blank faces
+    if(cache && cache.v === v) return;             // already current
+    Api.getPhotos().then(function(map){
+      if(!map) return;
+      avatars = map;
+      Api.savePhotoCache(v, map);
+      renderAll(); updatePregame();
+    });
   }
 
   function publicCfg(cfg){
@@ -762,8 +943,8 @@
     return out;
   }
 
-  // Call sites still mutate the league object. This works out what actually changed
-  // and sends the matching action, so the server decides whether the caller may do it.
+  // Call sites mutate the league object optimistically; this works out what changed and
+  // sends the matching write through the adapter, which decides success / queue / refusal.
   async function commit(mutate){
     var before = JSON.parse(JSON.stringify({
       players: league.players, members: league.members, cfg: publicCfg(league.cfg),
@@ -772,6 +953,7 @@
     }));
 
     mutate(league);
+    renderAll();   // optimistic: the UI updates now; the caller never waits on the network
 
     var jobs = [];
     var wiped = before.players.length && !league.players.length && !league.matches.length;
@@ -800,17 +982,35 @@
       }
     }
 
-    for(var i = 0; i < jobs.length; i++){
-      jobs[i].token = token;
-      var res = await api(jobs[i]);
-      if(res && res.state){ applyState(res.state); continue; }
-      // the server said no, so drop the optimistic change and show what it actually holds
-      var fresh = await api({ action:'state' });
-      if(fresh && fresh.state) applyState(fresh.state);
-      break;
-    }
-    renderAll();
+    syncJobs(jobs);   // fire-and-forget: retries, queueing and refusal handling happen in the background
   }
+
+  // Runs the writes behind an already-rendered optimistic change. Not awaited by callers.
+  var syncing = 0;
+  async function syncJobs(jobs){
+    syncing++;
+    try {
+    for(var i = 0; i < jobs.length; i++){
+      var job = jobs[i], r;
+      if(job.action === 'wipe') r = await Api.wipe();
+      else if(job.action === 'season') r = await Api.endSeason(job);
+      else if(job.action === 'match') r = await Api.recordMatch(job.match);
+      else if(job.action === 'deleteMatch') r = await Api.deleteMatch(job.id);
+      else if(job.action === 'roster') r = await Api.saveRoster(job.players, job.members);
+      else r = await Api.saveSettings(job.cfg);
+
+      if(r && r.state){ applyState(r.state); renderAll(); }
+      else if(r && r.refused){
+        toast(r.error);                       // server said no — drop the optimistic change
+        var fresh = await Api.getState();
+        if(fresh){ applyState(fresh); renderAll(); }
+        break;
+      }
+      // r.queued / r.offline: keep the optimistic change; it replays on reconnect
+    }
+    } finally { syncing--; }
+  }
+  function writesPending(){ return syncing > 0 || Api.queuedCount() > 0; }
 
   /* ---------------- player photos ---------------- */
   var avatars = {};   // name -> data URL, kept in its own storage key per player
@@ -849,12 +1049,13 @@
   }
 
   async function savePhoto(name, dataUrl){
-    var res = await api({ action:'photo', name:name, image:dataUrl, token:token });
-    if(!res) return;
-    avatars[name] = dataUrl;
+    var res = await Api.savePhoto(name, dataUrl);
+    if(res && res.refused){ toast(res.error); return; }
+    avatars[name] = dataUrl;                       // optimistic; a queued photo replays on reconnect
+    Api.savePhotoCache('pending', avatars);        // survive a reload; next state read pulls the true version
     renderAll();
     updatePregame();
-    toast('Photo saved');
+    toast(res && res.queued ? 'Photo saved — will sync when reconnected' : 'Photo saved');
   }
 
   /* ---------------- sound ---------------- */
@@ -948,9 +1149,12 @@
   }
 
   async function boot(){
-    var res = await api({ action:'state' });
-    if(res) applyState(res.state);
-    renderAll();
+    var cached = Api.cachedState();
+    if(cached){ applyState(cached); renderAll(); }   // instant paint from the last known state
+    Api.refreshQueued();
+    var fresh = await Api.getState();
+    if(fresh){ applyState(fresh); renderAll(); }
+    if(Api.queuedCount()) Api.flush();               // replay anything left over from a previous session
   }
 
   /* ---------------- standings ---------------- */
@@ -1927,10 +2131,9 @@
     var entry = $('passInput').value.trim();
     if(!entry){ toast('Enter your passcode'); return; }
     $('passInput').value = '';
-    var res = await api({ action:'login', code:entry });
+    var res = await Api.login(entry);
     if(!res) return;
     role = res.role;
-    token = res.token;
     if(res.newAdmin){
       showRecovery(res.newAdmin, 'New admin passcode');
       toast('Recovery accepted — passcodes reissued');
@@ -1942,9 +2145,8 @@
   });
 
   $('signOutBtn').addEventListener('click', async function(){
-    await api({ action:'logout', token:token });
+    await Api.logout();
     role = 'guest';
-    token = null;
     $('recoveryBox').style.display = 'none';
     renderAll();
     toast('Signed out');
@@ -1956,14 +2158,16 @@
     if(code === null) return;
     code = code.trim();
     if(code && code.length < 4){ toast('Use at least four characters'); return; }
-    var res = await api({ action:'passcode', which:'manager', code:code, token:token });
-    if(res) toast(code ? 'Manager passcode set' : 'Manager access removed');
+    var res = await Api.setPasscode('manager', code);
+    if(res && res.refused){ toast(res.error); return; }
+    toast(code ? 'Manager passcode set' : 'Manager access removed');
   });
 
   $('recoveryBtn').addEventListener('click', async function(){
     if(!requireAdmin()) return;
-    var res = await api({ action:'passcode', which:'recovery', token:token });
-    if(res && res.recovery) showRecovery(res.recovery, 'New recovery code');
+    var res = await Api.setPasscode('recovery');
+    if(res && res.refused){ toast(res.error); return; }
+    if(res && res.data && res.data.recovery) showRecovery(res.data.recovery, 'New recovery code');
   });
 
   $('changePassBtn').addEventListener('click', async function(){
@@ -1972,8 +2176,9 @@
     if(code === null) return;
     code = code.trim();
     if(code.length < 6){ toast('Use at least six characters'); return; }
-    var res = await api({ action:'passcode', which:'admin', code:code, token:token });
-    if(res) toast('Admin passcode changed');
+    var res = await Api.setPasscode('admin', code);
+    if(res && res.refused){ toast(res.error); return; }
+    toast('Admin passcode changed');
   });
   $('photoInput').addEventListener('change', function(){
     var file = this.files && this.files[0];
@@ -2105,6 +2310,19 @@
   });
 
   boot();
+
+  /* keep standings fresh without a reload — but never while a match is live, so an
+     in-progress game is never overwritten. game != null means a match is on the board. */
+  function refreshState(){
+    // never while a match is live, and never while our own writes are still in flight or
+    // queued — otherwise a poll could momentarily clobber an optimistic change
+    if(document.hidden || game || writesPending()) return;
+    Api.getState().then(function(s){ if(s){ applyState(s); renderAll(); } });
+  }
+  setInterval(refreshState, 30000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) refreshState(); });
+  window.addEventListener('focus', refreshState);
+  window.addEventListener('online', function(){ Api.flush(); refreshState(); });
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){
