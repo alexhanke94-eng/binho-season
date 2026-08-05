@@ -30,7 +30,8 @@ var TOKEN_HOURS  = 12;
 var HEADERS = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath',
   'CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech',
   'HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals',
-  'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece'];
+  'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece',
+  'Time'];   // appended last on purpose: Standings/Standard formulas reference columns by position
 
 /* ============================ setup ============================ */
 
@@ -357,7 +358,8 @@ function matchToRow_(m){
     num_(m.yH), num_(m.rH), num_(m.syH), num_(m.tH), num_(m.ogH), num_(m.rH) + (standard ? 0 : num_(m.ogH)),
     num_(m.yA), num_(m.rA), num_(m.syA), num_(m.tA), num_(m.ogA), num_(m.rA) + (standard ? 0 : num_(m.ogA)),
     num_(m.htH), num_(m.htA),
-    m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || ''
+    m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || '',
+    formatTime_(m.ts)
   ];
 }
 
@@ -369,7 +371,7 @@ function readMatches_(){
     var r = rows[i];
     if(!r[0]) continue;
     out.push({
-      id: r[0], ts: dateToTs_(r[1]), type: r[2] === 'Standard' ? 'standard' : 'league',
+      id: r[0], ts: dateToTs_(r[1], r[32]), type: r[2] === 'Standard' ? 'standard' : 'league',
       home: r[3], away: r[4], sh: num_(r[5]), sa: num_(r[6]),
       sd: r[8] === 'Yes', mode: r[10], belt: r[11] === 'Yes', official: r[12] === 'Yes',
       yH: num_(r[13]), rH: num_(r[14]), syH: num_(r[15]), tH: num_(r[16]), ogH: num_(r[17]),
@@ -407,7 +409,11 @@ function readPhotos_(){
 function getLogSheet_(){
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(LOG_SHEET) || ss.insertSheet(LOG_SHEET);
-  if(sheet.getLastRow() === 0){ sheet.appendRow(HEADERS); sheet.setFrozenRows(1); }
+  if(sheet.getLastRow() === 0){ sheet.appendRow(HEADERS); sheet.setFrozenRows(1); return sheet; }
+  // Upgrade an existing sheet in place: add the Time header to the first empty column if missing.
+  var lastCol = sheet.getLastColumn();
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  if(header.indexOf('Time') === -1) sheet.getRange(1, lastCol + 1).setValue('Time');
   return sheet;
 }
 
@@ -441,9 +447,20 @@ function formatDate_(ts){
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
-function dateToTs_(v){
-  if(v instanceof Date) return v.getTime();
-  var d = new Date(v + 'T12:00:00');
+function formatTime_(ts){
+  var d = ts ? new Date(ts) : new Date();
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'HH:mm:ss');
+}
+
+// Combine the Date cell with the (optional) Time cell into an accurate timestamp. Cells can
+// come back as strings or, if Sheets auto-formatted them, as Date objects — handle both.
+// Rows with no time (everything logged before the Time column existed) fall back to noon.
+function dateToTs_(dateVal, timeVal){
+  var tz = Session.getScriptTimeZone();
+  var dateStr = dateVal instanceof Date ? Utilities.formatDate(dateVal, tz, 'yyyy-MM-dd') : String(dateVal || '');
+  var timeStr = timeVal instanceof Date ? Utilities.formatDate(timeVal, tz, 'HH:mm:ss') : String(timeVal || '');
+  if(!/^\d{1,2}:\d{2}/.test(timeStr)) timeStr = '12:00:00';   // missing/invalid time → noon, as before
+  var d = new Date(dateStr + 'T' + timeStr);
   return isNaN(d.getTime()) ? Date.now() : d.getTime();
 }
 

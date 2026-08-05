@@ -455,6 +455,10 @@
     <section class="view" id="v-log">
       <div class="pad">
         <h2>Match log</h2>
+        <div class="seg" id="logScopeSeg">
+          <button class="on" data-scope="league">Season</button>
+          <button data-scope="standard">Standard</button>
+        </div>
         <div class="sub" id="logSub">Every recorded game, newest first.</div>
         <div id="logWrap"></div>
         <h3>Send to the sheet</h3>
@@ -561,12 +565,13 @@
     <h2>Log a finished game</h2>
     <div class="sub" style="margin-bottom:14px">For a match played away from the app. Everything the live board tracks, entered by hand.</div>
 
+    <div class="field"><label>Game type</label><select id="mType">
+      <option value="league">League match</option>
+      <option value="standard">Standard Binho</option>
+    </select></div>
     <div class="row">
-      <div class="field"><label>Game type</label><select id="mType">
-        <option value="league">League match</option>
-        <option value="standard">Standard Binho</option>
-      </select></div>
       <div class="field"><label>Date played</label><input type="date" id="mDate"></div>
+      <div class="field"><label>Time played (optional)</label><input type="time" id="mTime"></div>
     </div>
 
     <h3>Result</h3>
@@ -1521,6 +1526,7 @@
     var d = new Date();
     $('mDate').value = d.getFullYear() + '-' +
       ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    $('mTime').value = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     $('mType').value = gameType;
     ['mSH','mSA','mYH','mYA','mSyH','mSyA','mSrH','mSrA','mTH','mTA','mOgH','mOgA']
       .forEach(function(id){ $(id).value = 0; });
@@ -1589,7 +1595,8 @@
 
     var ts = Date.now();
     if($('mDate').value){
-      var parsed = new Date($('mDate').value + 'T12:00:00');
+      var time = $('mTime').value ? $('mTime').value + ':00' : '12:00:00';   // no time given → noon
+      var parsed = new Date($('mDate').value + 'T' + time);
       if(!isNaN(parsed.getTime())) ts = parsed.getTime();
     }
 
@@ -1962,37 +1969,43 @@
 
   function renderLog(){
     var w = $('logWrap');
-    if(!league.matches.length){ w.innerHTML = '<div class="empty">No matches recorded yet.</div>'; }
-    else {
-      w.innerHTML = league.matches.slice(0, 40).map(function(m){
+    // strictly newest first by full timestamp (date + time)
+    var sorted = league.matches.slice().sort(function(a, b){ return b.ts - a.ts; });
+    var shown = sorted.filter(function(m){ return scope === 'league' ? !isStandard(m) : isStandard(m); });
+    if(!shown.length){
+      w.innerHTML = '<div class="empty">No ' + (scope === 'league' ? 'league' : 'standard') + ' games recorded yet.</div>';
+    } else {
+      w.innerHTML = shown.slice(0, 40).map(function(m){
         var win = m.sh > m.sa ? m.home : m.away, lose = m.sh > m.sa ? m.away : m.home;
         var tags = [];
         if(isStandard(m)) tags.push('Standard Binho');
         else if(!m.official) tags.push('For fun');
         if(m.sd) tags.push('Sudden death');
         if(m.belt) tags.push('Belt');
-        if(m.mode && m.mode !== 'Standard') tags.push(m.mode);
+        if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho') tags.push(m.mode);
         if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
         if((m.tH||0)+(m.tA||0)) tags.push('Technical');
         if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
         if(m.entry === 'manual') tags.push('Entered by hand');
+        var when = new Date(m.ts).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
         return '<div class="log-item"><div><div class="who">' + esc(win) + ' beat ' + esc(lose) + '</div>' +
-          '<div class="tags">' + new Date(m.ts).toLocaleDateString(undefined,{month:'short',day:'numeric'}) +
+          '<div class="tags">' + when +
           (tags.length ? ' · ' + tags.join(' · ') : '') + '</div></div>' +
           '<div style="display:flex;align-items:center;gap:8px">' + Math.max(m.sh,m.sa) + '–' + Math.min(m.sh,m.sa) +
           '<button class="log-x" data-del="' + m.id + '" aria-label="Delete match">×</button></div></div>';
       }).join('');
     }
-    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece'];
-    var rows = league.matches.map(function(m){
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time'];
+    var rows = sorted.map(function(m){
       var win = m.sh > m.sa ? m.home : m.away;
       var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
-      return [m.id, new Date(m.ts).toISOString().slice(0,10), isStandard(m)?'Standard':'League', m.home, m.away, m.sh, m.sa, win, m.sd?'Yes':'No', cs,
+      var d = new Date(m.ts);
+      return [m.id, d.toISOString().slice(0,10), isStandard(m)?'Standard':'League', m.home, m.away, m.sh, m.sa, win, m.sd?'Yes':'No', cs,
         m.mode||'Standard', m.belt?'Yes':'No', m.official?'Yes':'No',
         m.yH||0, m.rH||0, m.syH||0, m.tH||0, m.ogH||0, (m.rH||0) + (isStandard(m) ? 0 : (m.ogH||0)),
         m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
         m.htH||0, m.htA||0,
-        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||''].join('\t');
+        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19)].join('\t');
     });
     $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
   }
@@ -2276,14 +2289,14 @@
 
   function setScope(next){
     scope = next;
-    ['#scopeSeg', '#mxScopeSeg'].forEach(function(sel){
+    ['#scopeSeg', '#mxScopeSeg', '#logScopeSeg'].forEach(function(sel){
       document.querySelectorAll(sel + ' button').forEach(function(b){
         b.classList.toggle('on', b.dataset.scope === next);
       });
     });
-    renderStandings(); renderSelections(); renderMatchups();
+    renderStandings(); renderSelections(); renderMatchups(); renderLog();
   }
-  document.querySelectorAll('#scopeSeg button, #mxScopeSeg button').forEach(function(b){
+  document.querySelectorAll('#scopeSeg button, #mxScopeSeg button, #logScopeSeg button').forEach(function(b){
     b.addEventListener('click', function(){ setScope(b.dataset.scope); });
   });
 
