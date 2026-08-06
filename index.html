@@ -81,7 +81,19 @@
   .pregame{padding:18px 16px}
   .vs{font-family:var(--display);font-weight:800;font-size:1.1rem;letter-spacing:.2em;color:var(--dim);text-align:center;margin:6px 0}
 
-  .board{display:grid;grid-template-rows:1fr auto 1fr;height:100%}
+  .board{position:relative;display:grid;grid-template-rows:1fr auto 1fr;height:100%}
+  /* last-second play: a loud bar across the board so nobody thinks live play resumed */
+  .ls-bar{
+    position:absolute;top:0;left:0;right:0;z-index:15;display:none;gap:10px 14px;
+    align-items:center;justify-content:center;flex-wrap:wrap;padding:9px 14px;
+    background:var(--yellow);color:var(--turf);
+    font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;text-align:center;
+  }
+  .ls-bar.on{display:flex}
+  .ls-bar button{
+    background:var(--turf);color:var(--yellow);border-radius:999px;padding:6px 14px;
+    font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+  }
   .side{position:relative;overflow:hidden;background:repeating-linear-gradient(90deg,var(--turf) 0 42px,var(--turf-2) 42px 84px)}
   .side--away .side__in{flex-direction:column-reverse}
   .side--away .side__tools{top:0;bottom:auto}
@@ -139,6 +151,9 @@
   .log-item .who{font-family:var(--body);font-size:.86rem}
   .log-item .tags{font-size:.56rem;letter-spacing:.1em;color:var(--dim);margin-top:3px}
   .log-x{color:var(--dim);padding:6px 8px;font-size:.9rem}
+  .log-edit{color:var(--dim);padding:6px 6px;font-size:.82rem}
+  .log-item.discarded{opacity:.5}
+  .log-restore{color:var(--home);font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--line);border-radius:999px}
   .empty{font-family:var(--mono);font-size:.72rem;color:var(--dim);line-height:1.7;padding:16px 0}
 
   /* tab bar */
@@ -357,6 +372,10 @@
       </div>
 
       <div class="board" id="live" style="display:none">
+        <div class="ls-bar" id="lsBar">
+          <span>Recording a last-second play — confirm when done</span>
+          <button id="lsConfirmBtn">Confirm result</button>
+        </div>
         <div class="side side--away" id="sideAway" style="--accent:var(--away)">
           <div class="side__glow"></div>
           <button class="side__tap" id="tapAway" aria-label="Goal for away player"></button>
@@ -461,6 +480,7 @@
         </div>
         <div class="sub" id="logSub">Every recorded game, newest first.</div>
         <div id="logWrap"></div>
+        <div id="discardedWrap"></div>
         <h3>Send to the sheet</h3>
         <div class="note">Copy every match as tab-separated rows and paste straight into the Log tab of the season workbook.</div>
         <button class="btn" id="copyBtn" style="margin-top:10px">Copy all rows</button>
@@ -556,13 +576,26 @@
     <div class="check" id="recOfficialRow"><input type="checkbox" id="recOfficial" checked><label for="recOfficial" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Office game — counts toward the season</label></div>
     <div class="note" id="recStdNote" style="display:none">Filed under standard play. It won't touch league standings, head to head, or selection stats.</div>
     <button class="btn btn--go" id="recSaveBtn" style="margin-top:8px">Record match</button>
+    <button class="btn" id="recLastSecBtn" style="margin-top:10px">Last-second play</button>
     <button class="btn btn--ghost" id="recBackBtn" style="margin-top:10px">Back to the board</button>
+    <button class="btn btn--danger" id="recDiscardBtn" style="margin-top:20px">Discard match</button>
+  </div>
+</div>
+
+<!-- discard confirmation -->
+<div class="veil" id="discardVeil">
+  <div class="sheet">
+    <h2>Discard this match?</h2>
+    <div class="sub" style="margin-bottom:14px">It stays on record but counts for nothing — no standings, head to head, selections, clean sheets or belt. A manager can restore it later.</div>
+    <div class="field"><label>Type DISCARD to confirm</label><input type="text" id="discardInput" autocomplete="off" placeholder="DISCARD"></div>
+    <button class="btn btn--danger" id="discardConfirmBtn" style="margin-top:8px" disabled>Discard match</button>
+    <button class="btn btn--ghost" id="discardCancelBtn" style="margin-top:10px">Cancel</button>
   </div>
 </div>
 
 <div class="veil" id="manualVeil">
   <div class="sheet">
-    <h2>Log a finished game</h2>
+    <h2 id="manualTitle">Log a finished game</h2>
     <div class="sub" style="margin-bottom:14px">For a match played away from the app. Everything the live board tracks, entered by hand.</div>
 
     <div class="field"><label>Game type</label><select id="mType">
@@ -793,6 +826,7 @@
       switch(p.action){
         case 'match':       return 'the ' + (p.match ? (p.match.home + ' vs ' + p.match.away) : 'match') + ' result';
         case 'deleteMatch': return 'a deleted match';
+        case 'updateMatch': return p.op === 'discard' ? 'discarding a match' : p.op === 'restore' ? 'restoring a match' : 'a match edit';
         case 'roster':      return 'the roster change';
         case 'settings':    return 'the settings change';
         case 'season':      return 'ending the season';
@@ -890,6 +924,7 @@
       push: write,
       recordMatch: function(m){ return write({ action: 'match', match: m }); },
       deleteMatch: function(id){ return write({ action: 'deleteMatch', id: id }); },
+      updateMatch: function(m, op){ return write({ action: 'updateMatch', match: m, op: op }); },
       saveRoster: function(players, mem){ return write({ action: 'roster', players: players, members: mem }); },
       saveSettings: function(cfg){ return write({ action: 'settings', cfg: cfg }); },
       endSeason: function(a){ return write({ action: 'season', name: a.name, champion: a.champion, table: a.table }); },
@@ -1002,6 +1037,7 @@
       else if(job.action === 'match') r = await Api.recordMatch(job.match);
       else if(job.action === 'deleteMatch') r = await Api.deleteMatch(job.id);
       else if(job.action === 'roster') r = await Api.saveRoster(job.players, job.members);
+      else if(job.action === 'updateMatch') r = await Api.updateMatch(job.match, job.op);
       else r = await Api.saveSettings(job.cfg);
 
       if(r && r.state){ applyState(r.state); renderAll(); }
@@ -1014,6 +1050,14 @@
       // r.queued / r.offline: keep the optimistic change; it replays on reconnect
     }
     } finally { syncing--; }
+  }
+
+  // Optimistically apply an edit / discard / restore, then push it through the adapter so it
+  // gets the same retry, offline queue and rollback-on-refusal as every other write.
+  function applyMatchChange(op, match, mutate){
+    mutate(league);
+    renderAll();
+    syncJobs([{ action:'updateMatch', op: op, match: match }]);
   }
   function writesPending(){ return syncing > 0 || Api.queuedCount() > 0; }
 
@@ -1164,8 +1208,8 @@
 
   /* ---------------- standings ---------------- */
   function isStandard(m){ return m.type === 'standard'; }
-  function leagueMatches(){ return league.matches.filter(function(m){ return !isStandard(m) && m.official; }); }
-  function standardMatches(){ return league.matches.filter(isStandard); }
+  function leagueMatches(){ return league.matches.filter(function(m){ return !isStandard(m) && m.official && !m.discarded; }); }
+  function standardMatches(){ return league.matches.filter(function(m){ return isStandard(m) && !m.discarded; }); }
 
   function statsFor(name, matches){
     var s = {name:name, gp:0, w:0, l:0, gf:0, ga:0, cs:0, ht:0, y:0, r:0, sy:0, t:0, og:0, pts:0, susp:false};
@@ -1234,6 +1278,7 @@
     $('adminTools').style.display = isAdmin() ? 'block' : 'none';
   }
   function inScope(m, sc){
+    if(m.discarded) return false;   // discarded games count for nothing anywhere
     return (sc || scope) === 'league' ? (!isStandard(m) && m.official) : isStandard(m);
   }
   function scopedMatches(sc){
@@ -1304,15 +1349,29 @@
     if(undoStack.length > 80) undoStack.shift();
   }
 
+  // shared ending predicates so live play, the clock running out, and confirming a
+  // last-second play all judge the outcome by the exact same rules
+  function reachedLimit(){ return game.limit > 0 && (game.sh >= game.limit || game.sa >= game.limit); }
+  function tieAtSdMark(){ return !game.std && game.sh === game.sa && game.sh >= league.cfg.sdScore; }
+
+  // Decide and act on the ending once the clock is spent (clock ran out, or a last-second
+  // play is confirmed). Reuses endGame / enterSuddenDeath so the rules cannot drift.
+  function resolveEnding(){
+    if(reachedLimit()){ endGame(); return; }
+    if(game.sh === game.sa){ enterSuddenDeath('time'); return; }   // clock's up and it's level → sudden death
+    endGame();                                                     // someone leads → that result stands
+  }
+
   function applyGoal(side){
     if(side === 'home') game.sh++; else game.sa++;
     var el = $(side === 'home' ? 'sideHome' : 'sideAway');
     el.classList.add('pop'); setTimeout(function(){ el.classList.remove('pop'); }, 220);
-    var limit = game.limit;
-    // sudden death is not golden goal: play runs on until a side reaches the limit
-    if(limit > 0 && (game.sh >= limit || game.sa >= limit)){ endGame(); return; }
+    // recording a last-second play: controls only adjust the score; the outcome is judged
+    // once, on Confirm, by resolveEnding() — nothing auto-ends here
+    if(game.lastSecond){ renderLive(); return; }
+    if(reachedLimit()){ endGame(); return; }
     // house rule: a tie at the sudden-death mark ends regulation on the spot
-    if(!game.std && !game.sd && game.sh === game.sa && game.sh >= league.cfg.sdScore){ enterSuddenDeath('score'); return; }
+    if(!game.sd && tieAtSdMark()){ enterSuddenDeath('score'); return; }
     // a goal in sudden death does not touch the clock — the minute keeps running
     renderLive();
   }
@@ -1338,11 +1397,12 @@
     // league own goal: pause on a confirmation, resume the clock on accept.
     // skip it if the goal already ended the match or tipped into sudden death.
     if(isLeague && game && !game.over && !$('sdVeil').classList.contains('open')){
+      var lastSec = game.lastSecond;
       showSD('Own goal',
         offender + ' scored an own goal',
-        'It counts for ' + opponent + '. ' + offender +
-        ' takes one of their own field pegs off the board, then press play to restart the clock.',
-        'Resume the clock');
+        'It counts for ' + opponent + '. ' + offender + ' takes one of their own field pegs off the board' +
+        (lastSec ? '.' : ', then press play to restart the clock.'),
+        lastSec ? 'Back to the play' : 'Resume the clock');
     }
   }
 
@@ -1402,8 +1462,7 @@
       game.left--;
       if(game.left <= 0){
         game.left = 0; stopClock(); game.running = false;
-        if(game.sh === game.sa){ enterSuddenDeath('time'); return; }
-        endGame(); return;
+        resolveEnding(); return;
       }
     }
     renderLive();
@@ -1418,7 +1477,10 @@
     $('sdVeil').classList.add('open');
   }
 
+  function exitLastSecond(){ if(game) game.lastSecond = false; $('lsBar').classList.remove('on'); }
+
   function enterSuddenDeath(cause){
+    exitLastSecond();
     stopClock();
     game.running = false;
     game.sd = true;
@@ -1454,6 +1516,7 @@
   function resumeSD(){
     $('sdVeil').classList.remove('open');
     if(!game || game.over) return;
+    if(game.lastSecond){ renderLive(); return; }   // last-second editing: the clock stays at 0:00
     game.running = true;
     whistle(W_KICKOFF);
     stopClock();
@@ -1463,6 +1526,7 @@
 
   function endGame(){
     if(!game) return;
+    exitLastSecond();
     stopClock(); game.running = false; game.over = true;
     $('sdVeil').classList.remove('open');
     whistle(W_FULLTIME);
@@ -1486,9 +1550,24 @@
     renderLive();
   }
 
-  async function saveMatch(){
-    var g = game; if(!g) return;
-    var rec = {
+  // reopen the live board to record something that happened before the buzzer
+  function lastSecondPlay(){
+    if(!game) return;
+    game.over = false;
+    game.lastSecond = true;
+    stopClock(); game.running = false;
+    game.left = 0;
+    $('recVeil').classList.remove('open');
+    $('lsBar').classList.add('on');
+    renderLive();
+  }
+  function confirmLastSecond(){
+    if(!game) return;
+    resolveEnding();   // reuses endGame / enterSuddenDeath; exitLastSecond clears the banner
+  }
+
+  function recordFromGame(g){
+    return {
       id: 'm' + Date.now() + Math.random().toString(36).slice(2,6),
       ts: Date.now(),
       home:g.home, away:g.away, sh:g.sh, sa:g.sa,
@@ -1498,6 +1577,18 @@
       puH:g.puH, puA:g.puA, ecH:g.ecH, ecA:g.ecA,
       official: g.std ? false : $('recOfficial').checked
     };
+  }
+
+  function leaveBoard(){
+    game = null;
+    $('recVeil').classList.remove('open');
+    $('live').style.display = 'none';
+    $('pregame').style.display = 'block';
+  }
+
+  async function saveMatch(){
+    var g = game; if(!g) return;
+    var rec = recordFromGame(g);
     await commit(function(db){
       db.matches.unshift(rec);
       if(rec.belt && !g.std && rec.sh !== rec.sa){
@@ -1505,18 +1596,31 @@
       }
     });
     pushToSheet(rec);
-    game = null;
-    $('recVeil').classList.remove('open');
-    $('live').style.display = 'none';
-    $('pregame').style.display = 'block';
+    leaveBoard();
     toast('Match recorded');
+  }
+
+  // Discard the just-played game: kept as a record (in the Discarded sheet) but counts for nothing.
+  function discardCurrentMatch(){
+    var g = game; if(!g) return;
+    var rec = recordFromGame(g);
+    rec.discarded = true;
+    applyMatchChange('discard', rec, function(db){ db.matches.unshift(rec); });
+    $('discardVeil').classList.remove('open');
+    leaveBoard();
+    toast('Match discarded — kept on record, counts for nothing');
   }
 
   // recorded matches already reach the sheet through the API
   function pushToSheet(){}
 
   /* ---------------- manual entry ---------------- */
+  var manualEditId = null, manualEditMatch = null;   // set while editing an existing match
+
   function openManual(){
+    manualEditId = null; manualEditMatch = null;
+    $('manualTitle').textContent = 'Log a finished game';
+    $('mSaveBtn').textContent = 'Record match';
     manualPool();
 
     fillSelect($('mPuH'), POWER_UPS, 'Choose…'); fillSelect($('mPuA'), POWER_UPS, 'Choose…');
@@ -1621,6 +1725,20 @@
       entry: 'manual'
     };
 
+    if(manualEditId){
+      rec.id = manualEditId;                                        // keep the same MatchID
+      if(manualEditMatch && manualEditMatch.entry !== 'manual') delete rec.entry;   // don't relabel a live game
+      rec.edited = true;
+      var editId = manualEditId;
+      manualEditId = null; manualEditMatch = null;
+      applyMatchChange('edit', rec, function(db){
+        for(var i = 0; i < db.matches.length; i++){ if(db.matches[i].id === editId){ db.matches[i] = rec; break; } }
+      });
+      $('manualVeil').classList.remove('open');
+      toast('Match updated');
+      return;
+    }
+
     await commit(function(db){
       db.matches.unshift(rec);
       if(rec.belt && !std && rec.sh !== rec.sa){
@@ -1630,6 +1748,48 @@
     pushToSheet(rec);
     $('manualVeil').classList.remove('open');
     toast('Match recorded');
+  }
+
+  function openManualForEdit(m){
+    if(!requireManage()) return;
+    openManual();                        // reset + populate players/selects for the current type first
+    manualEditId = m.id;
+    manualEditMatch = m;
+    $('manualTitle').textContent = 'Edit match';
+    $('mSaveBtn').textContent = 'Save changes';
+
+    var std = isStandard(m);
+    $('mType').value = std ? 'standard' : 'league';
+    manualType();                        // rebuild the player pool + show/hide league-only for this type
+    var d = new Date(m.ts);
+    $('mDate').value = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+    $('mTime').value = ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+    $('mHome').value = m.home; $('mAway').value = m.away; manualNames();
+    $('mSH').value = m.sh; $('mSA').value = m.sa;
+    $('mSD').checked = !!m.sd;
+    $('mBelt').checked = !!m.belt;
+    $('mOfficial').checked = !!m.official;
+    if(std && (m.puH || m.ecH || m.puA || m.ecA)){ $('mStdDecl').checked = true; manualType(); }
+    if(!std) $('mMode').value = m.mode || 'Standard';
+    $('mPuH').value = m.puH || ''; $('mEcH').value = m.ecH || '';
+    $('mPuA').value = m.puA || ''; $('mEcA').value = m.ecA || '';
+    $('mYH').value = m.yH||0; $('mYA').value = m.yA||0;
+    $('mSyH').value = m.syH||0; $('mSyA').value = m.syA||0;
+    $('mSrH').value = Math.max(0, (m.rH||0) - (m.syH||0)); $('mSrA').value = Math.max(0, (m.rA||0) - (m.syA||0));
+    $('mTH').value = m.tH||0; $('mTA').value = m.tA||0;
+    $('mOgH').value = m.ogH||0; $('mOgA').value = m.ogA||0;
+  }
+
+  function restoreMatch(id){
+    if(!requireManage()) return;
+    var m = league.matches.filter(function(x){ return x.id === id; })[0];
+    if(!m) return;
+    var restored = Object.assign({}, m); restored.discarded = false;
+    applyMatchChange('restore', restored, function(db){
+      var t = db.matches.filter(function(x){ return x.id === id; })[0];
+      if(t) t.discarded = false;
+    });
+    toast('Match restored');
   }
 
   /* ---------------- rendering ---------------- */
@@ -1792,7 +1952,7 @@
 
   function between(a, b){
     return league.matches.filter(function(m){
-      return (m.home === a && m.away === b) || (m.home === b && m.away === a);
+      return !m.discarded && ((m.home === a && m.away === b) || (m.home === b && m.away === a));
     });
   }
 
@@ -1967,36 +2127,63 @@
     $('mxExport').value = [head.join('\t')].concat(out).join('\n');
   }
 
+  function logTags(m){
+    var tags = [];
+    if(isStandard(m)) tags.push('Standard Binho');
+    else if(!m.official) tags.push('For fun');
+    if(m.sd) tags.push('Sudden death');
+    if(m.belt) tags.push('Belt');
+    if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho') tags.push(m.mode);
+    if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
+    if((m.tH||0)+(m.tA||0)) tags.push('Technical');
+    if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
+    if(m.edited) tags.push('Edited');
+    if(m.entry === 'manual') tags.push('Entered by hand');
+    if(m.discarded) tags.push('Discarded');
+    return tags;
+  }
+  function logLine(m){
+    var win = m.sh > m.sa ? m.home : m.away, lose = m.sh > m.sa ? m.away : m.home;
+    var when = new Date(m.ts).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    var tags = logTags(m);
+    return '<div><div class="who">' + esc(win) + ' beat ' + esc(lose) + '</div>' +
+      '<div class="tags">' + when + (tags.length ? ' · ' + tags.join(' · ') : '') + '</div></div>';
+  }
+
   function renderLog(){
     var w = $('logWrap');
-    // strictly newest first by full timestamp (date + time)
-    var sorted = league.matches.slice().sort(function(a, b){ return b.ts - a.ts; });
-    var shown = sorted.filter(function(m){ return scope === 'league' ? !isStandard(m) : isStandard(m); });
+    var sorted = league.matches.slice().sort(function(a, b){ return b.ts - a.ts; });  // strictly newest first
+    var inScopeNow = function(m){ return scope === 'league' ? !isStandard(m) : isStandard(m); };
+    var active = sorted.filter(function(m){ return !m.discarded; });
+    var shown = active.filter(inScopeNow);
+    var shownDiscarded = sorted.filter(function(m){ return m.discarded && inScopeNow(m); });
+
     if(!shown.length){
       w.innerHTML = '<div class="empty">No ' + (scope === 'league' ? 'league' : 'standard') + ' games recorded yet.</div>';
     } else {
+      var canEdit = canManage();   // managers/admins only — guests see no Edit control
       w.innerHTML = shown.slice(0, 40).map(function(m){
-        var win = m.sh > m.sa ? m.home : m.away, lose = m.sh > m.sa ? m.away : m.home;
-        var tags = [];
-        if(isStandard(m)) tags.push('Standard Binho');
-        else if(!m.official) tags.push('For fun');
-        if(m.sd) tags.push('Sudden death');
-        if(m.belt) tags.push('Belt');
-        if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho') tags.push(m.mode);
-        if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
-        if((m.tH||0)+(m.tA||0)) tags.push('Technical');
-        if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
-        if(m.entry === 'manual') tags.push('Entered by hand');
-        var when = new Date(m.ts).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
-        return '<div class="log-item"><div><div class="who">' + esc(win) + ' beat ' + esc(lose) + '</div>' +
-          '<div class="tags">' + when +
-          (tags.length ? ' · ' + tags.join(' · ') : '') + '</div></div>' +
-          '<div style="display:flex;align-items:center;gap:8px">' + Math.max(m.sh,m.sa) + '–' + Math.min(m.sh,m.sa) +
+        return '<div class="log-item">' + logLine(m) +
+          '<div style="display:flex;align-items:center;gap:6px">' + Math.max(m.sh,m.sa) + '–' + Math.min(m.sh,m.sa) +
+          (canEdit ? '<button class="log-edit" data-edit="' + m.id + '" aria-label="Edit match">✎</button>' : '') +
           '<button class="log-x" data-del="' + m.id + '" aria-label="Delete match">×</button></div></div>';
       }).join('');
     }
-    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time'];
-    var rows = sorted.map(function(m){
+
+    // discarded games sit apart at the bottom, dimmed; managers and admins can restore
+    var dw = $('discardedWrap');
+    if(dw){
+      dw.innerHTML = !shownDiscarded.length ? '' :
+        '<h3>Discarded games</h3>' + shownDiscarded.slice(0, 40).map(function(m){
+          var restore = canManage() ? '<button class="log-restore" data-restore="' + m.id + '">Restore</button>' : '';
+          return '<div class="log-item discarded">' + logLine(m) +
+            '<div style="display:flex;align-items:center;gap:8px">' + Math.max(m.sh,m.sa) + '–' + Math.min(m.sh,m.sa) + restore + '</div></div>';
+        }).join('');
+    }
+
+    // export mirrors the Log sheet exactly — discarded games live in their own sheet, so they are left out
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited'];
+    var rows = active.map(function(m){
       var win = m.sh > m.sa ? m.home : m.away;
       var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
       var d = new Date(m.ts);
@@ -2005,7 +2192,7 @@
         m.yH||0, m.rH||0, m.syH||0, m.tH||0, m.ogH||0, (m.rH||0) + (isStandard(m) ? 0 : (m.ogH||0)),
         m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
         m.htH||0, m.htA||0,
-        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19)].join('\t');
+        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':''].join('\t');
     });
     $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
   }
@@ -2066,7 +2253,10 @@
   $('mHome').addEventListener('change', manualNames);
   $('mAway').addEventListener('change', manualNames);
   $('mSaveBtn').addEventListener('click', saveManual);
-  $('mCancelBtn').addEventListener('click', function(){ $('manualVeil').classList.remove('open'); });
+  $('mCancelBtn').addEventListener('click', function(){
+    manualEditId = null; manualEditMatch = null;
+    $('manualVeil').classList.remove('open');
+  });
 
   function openRules(){ $('rulesVeil').classList.add('open'); }
   $('rulesBtn').addEventListener('click', openRules);
@@ -2107,6 +2297,24 @@
   $('recBackBtn').addEventListener('click', function(){
     $('recVeil').classList.remove('open');
     if(game){ game.over = false; renderLive(); }
+  });
+  $('recLastSecBtn').addEventListener('click', lastSecondPlay);
+  $('lsConfirmBtn').addEventListener('click', confirmLastSecond);
+
+  $('recDiscardBtn').addEventListener('click', function(){
+    $('discardInput').value = '';
+    $('discardConfirmBtn').disabled = true;
+    $('discardVeil').classList.add('open');
+  });
+  $('discardInput').addEventListener('input', function(){
+    $('discardConfirmBtn').disabled = this.value.trim().toLowerCase() !== 'discard';
+  });
+  $('discardConfirmBtn').addEventListener('click', function(){
+    if(this.disabled) return;
+    discardCurrentMatch();
+  });
+  $('discardCancelBtn').addEventListener('click', function(){
+    $('discardVeil').classList.remove('open');   // back to the full-time screen, untouched
   });
 
   $('addPlayerBtn').addEventListener('click', function(){
@@ -2215,10 +2423,21 @@
   });
 
   $('logWrap').addEventListener('click', function(e){
-    var b = e.target.closest('[data-del]'); if(!b) return;
+    var edit = e.target.closest('[data-edit]');
+    if(edit){
+      var m = league.matches.filter(function(x){ return x.id === edit.dataset.edit; })[0];
+      if(m) openManualForEdit(m);               // openManualForEdit gates on requireManage()
+      return;
+    }
+    var del = e.target.closest('[data-del]'); if(!del) return;
     if(!requireManage()) return;
     if(!confirm('Delete this match from the league record?')) return;
-    commit(function(db){ db.matches = db.matches.filter(function(m){ return m.id !== b.dataset.del; }); });
+    commit(function(db){ db.matches = db.matches.filter(function(m){ return m.id !== del.dataset.del; }); });
+  });
+
+  $('discardedWrap').addEventListener('click', function(e){
+    var b = e.target.closest('[data-restore]'); if(!b) return;
+    restoreMatch(b.dataset.restore);
   });
 
   $('saveCfgBtn').addEventListener('click', function(){

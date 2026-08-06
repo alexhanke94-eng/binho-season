@@ -22,16 +22,17 @@
  *   successful sign-in, so holding the URL is not the same as holding the keys.
  */
 
-var LOG_SHEET    = 'Log';
-var STATE_SHEET  = 'State';
-var PHOTO_SHEET  = 'Photos';
-var TOKEN_HOURS  = 12;
+var LOG_SHEET     = 'Log';
+var DISCARD_SHEET = 'Discarded';   // kept records that count for nothing — physically out of Log
+var STATE_SHEET   = 'State';
+var PHOTO_SHEET   = 'Photos';
+var TOKEN_HOURS   = 12;
 
 var HEADERS = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath',
   'CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech',
   'HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals',
   'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece',
-  'Time'];   // appended last on purpose: Standings/Standard formulas reference columns by position
+  'Time','Edited'];   // appended last on purpose: Standings/Standard formulas reference columns by position
 
 /* ============================ setup ============================ */
 
@@ -95,6 +96,9 @@ function route_(body){
     case 'match':       return recordMatch_(body.match);          // guest
     case 'photo':       return savePhoto_(body.name, body.image); // guest
     case 'deleteMatch': return needs_(body.token, 'manager', function(){ return deleteMatch_(body.id); });
+    case 'updateMatch': return body.op === 'discard'
+      ? updateMatch_(body.match, 'discard')                                                    // anyone may discard
+      : needs_(body.token, 'manager', function(){ return updateMatch_(body.match, body.op); }); // edit / restore
     case 'roster':      return needs_(body.token, 'manager', function(){ return saveRoster_(body.players, body.members); });
     case 'settings':    return needs_(body.token, 'manager', function(){ return saveSettings_(body.cfg); });
     case 'season':      return needs_(body.token, 'admin',   function(){ return endSeason_(body.name, body.champion, body.table); });
@@ -272,7 +276,7 @@ function saveSettings_(cfg){
 
 function endSeason_(name, champion, table){
   var state = readState_();
-  var league = readMatches_().filter(function(m){ return m.type !== 'standard'; });
+  var league = readMatches_().filter(function(m){ return m.type !== 'standard' && !m.discarded; });
 
   state.archives = state.archives || [];
   state.archives.unshift({
@@ -306,10 +310,11 @@ function endSeason_(name, champion, table){
 
 function wipe_(){
   writeState_(blankState_());
-  var sheet = getLogSheet_();
-  sheet.clear();
-  sheet.appendRow(HEADERS);
-  sheet.setFrozenRows(1);
+  [getLogSheet_(), getDiscardSheet_()].forEach(function(sheet){
+    sheet.clear();
+    sheet.appendRow(HEADERS);
+    sheet.setFrozenRows(1);
+  });
   getPhotoSheet_().clear();
   return { ok:true, state: readState_() };
 }
@@ -329,12 +334,7 @@ function recordMatch_(m){
   }
 
   sheet.appendRow(matchToRow_(m));
-
-  if(m.belt && m.type !== 'standard' && m.sh !== m.sa){
-    var state = readState_();
-    state.belt = { holder: m.sh > m.sa ? m.home : m.away, since: m.ts || Date.now() };
-    writeState_(state);
-  }
+  recomputeBelt_();
   return { ok:true, state: readState_() };
 }
 
@@ -344,7 +344,63 @@ function deleteMatch_(id){
   for(var i = rows.length - 1; i >= 1; i--){
     if(rows[i][0] === id){ sheet.deleteRow(i + 1); break; }
   }
+  recomputeBelt_();
   return { ok:true, state: readState_() };
+}
+
+// One action for edit, discard and restore so the rules stay in one place.
+//   edit    — replace the row in place, wherever it lives
+//   discard — move it into the Discarded sheet, out of Log so no formula sees it
+//   restore — move it back into the Log sheet
+function updateMatch_(m, op){
+  if(!m || !m.id) return { ok:false, error:'No match id supplied' };
+  op = op || 'edit';
+  var log = getLogSheet_(), disc = getDiscardSheet_(), row = matchToRow_(m);
+
+  if(op === 'discard'){
+    removeRow_(log, m.id);
+    putRow_(disc, m.id, row);
+  } else if(op === 'restore'){
+    removeRow_(disc, m.id);
+    putRow_(log, m.id, row);
+  } else {
+    if(findRow_(log, m.id) > 0) putRow_(log, m.id, row);
+    else if(findRow_(disc, m.id) > 0) putRow_(disc, m.id, row);
+    else return { ok:false, error:'That match is not on file (unknown MatchID)' };
+  }
+  recomputeBelt_();
+  return { ok:true, state: readState_() };
+}
+
+function findRow_(sheet, id){
+  var last = sheet.getLastRow();
+  if(last < 2) return -1;
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for(var i = 0; i < ids.length; i++){ if(ids[i][0] === id) return i + 2; }
+  return -1;
+}
+function removeRow_(sheet, id){ var r = findRow_(sheet, id); if(r > 0) sheet.deleteRow(r); }
+function putRow_(sheet, id, row){
+  var r = findRow_(sheet, id);
+  if(r > 0) sheet.getRange(r, 1, 1, row.length).setValues([row]);
+  else sheet.appendRow(row);
+}
+
+// The belt is held by the winner of the most recent belt league match still in the Log.
+// Discarded games live in their own sheet, so they can never hold the belt.
+function recomputeBelt_(){
+  var matches = readMatchRows_(getLogSheet_()).sort(function(a, b){ return b.ts - a.ts; });
+  var belt = null;
+  for(var i = 0; i < matches.length; i++){
+    var m = matches[i];
+    if(m.belt && m.type !== 'standard' && m.sh !== m.sa){
+      belt = { holder: m.sh > m.sa ? m.home : m.away, since: m.ts };
+      break;
+    }
+  }
+  var state = readState_();
+  state.belt = belt;
+  writeState_(state);
 }
 
 function matchToRow_(m){
@@ -359,28 +415,36 @@ function matchToRow_(m){
     num_(m.yA), num_(m.rA), num_(m.syA), num_(m.tA), num_(m.ogA), num_(m.rA) + (standard ? 0 : num_(m.ogA)),
     num_(m.htH), num_(m.htA),
     m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || '',
-    formatTime_(m.ts)
+    formatTime_(m.ts), m.edited ? 'Yes' : ''
   ];
 }
 
-function readMatches_(){
-  var sheet = getLogSheet_();
+function rowToMatch_(r){
+  return {
+    id: r[0], ts: dateToTs_(r[1], r[32]), type: r[2] === 'Standard' ? 'standard' : 'league',
+    home: r[3], away: r[4], sh: num_(r[5]), sa: num_(r[6]),
+    sd: r[8] === 'Yes', mode: r[10], belt: r[11] === 'Yes', official: r[12] === 'Yes',
+    yH: num_(r[13]), rH: num_(r[14]), syH: num_(r[15]), tH: num_(r[16]), ogH: num_(r[17]),
+    yA: num_(r[19]), rA: num_(r[20]), syA: num_(r[21]), tA: num_(r[22]), ogA: num_(r[23]),
+    htH: num_(r[25]), htA: num_(r[26]),
+    puH: r[27], puA: r[28], ecH: r[29], ecA: r[30], mvp: r[31],
+    edited: r[33] === 'Yes'
+  };
+}
+
+function readMatchRows_(sheet){
   var rows = sheet.getDataRange().getValues();
   var out = [];
-  for(var i = 1; i < rows.length; i++){
-    var r = rows[i];
-    if(!r[0]) continue;
-    out.push({
-      id: r[0], ts: dateToTs_(r[1], r[32]), type: r[2] === 'Standard' ? 'standard' : 'league',
-      home: r[3], away: r[4], sh: num_(r[5]), sa: num_(r[6]),
-      sd: r[8] === 'Yes', mode: r[10], belt: r[11] === 'Yes', official: r[12] === 'Yes',
-      yH: num_(r[13]), rH: num_(r[14]), syH: num_(r[15]), tH: num_(r[16]), ogH: num_(r[17]),
-      yA: num_(r[19]), rA: num_(r[20]), syA: num_(r[21]), tA: num_(r[22]), ogA: num_(r[23]),
-      htH: num_(r[25]), htA: num_(r[26]),
-      puH: r[27], puA: r[28], ecH: r[29], ecA: r[30], mvp: r[31]
-    });
-  }
-  return out.sort(function(a, b){ return b.ts - a.ts; });
+  for(var i = 1; i < rows.length; i++){ if(rows[i][0]) out.push(rowToMatch_(rows[i])); }
+  return out;
+}
+
+// Log rows as normal, plus Discarded rows flagged so the app can show them apart.
+function readMatches_(){
+  var log = readMatchRows_(getLogSheet_());
+  var disc = readMatchRows_(getDiscardSheet_());
+  for(var i = 0; i < disc.length; i++) disc[i].discarded = true;
+  return log.concat(disc).sort(function(a, b){ return b.ts - a.ts; });
 }
 
 /* ============================ photos ============================ */
@@ -406,14 +470,27 @@ function readPhotos_(){
 
 /* ============================ plumbing ============================ */
 
+// Make sure row 1 has every header, appending any missing ones to the end so existing
+// column positions never shift (the workbook's formulas depend on them).
+function ensureHeaders_(sheet){
+  if(sheet.getLastRow() === 0){ sheet.appendRow(HEADERS); sheet.setFrozenRows(1); return; }
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  HEADERS.forEach(function(h){
+    if(header.indexOf(h) === -1){ sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h); header.push(h); }
+  });
+}
+
 function getLogSheet_(){
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(LOG_SHEET) || ss.insertSheet(LOG_SHEET);
-  if(sheet.getLastRow() === 0){ sheet.appendRow(HEADERS); sheet.setFrozenRows(1); return sheet; }
-  // Upgrade an existing sheet in place: add the Time header to the first empty column if missing.
-  var lastCol = sheet.getLastColumn();
-  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  if(header.indexOf('Time') === -1) sheet.getRange(1, lastCol + 1).setValue('Time');
+  ensureHeaders_(sheet);
+  return sheet;
+}
+
+function getDiscardSheet_(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DISCARD_SHEET) || ss.insertSheet(DISCARD_SHEET);
+  ensureHeaders_(sheet);
   return sheet;
 }
 
