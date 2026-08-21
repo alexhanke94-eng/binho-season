@@ -184,6 +184,33 @@
   .champ{border:1px solid var(--gold);border-radius:12px;padding:14px;margin:6px 0 4px;text-align:center;background:rgba(214,178,74,.08)}
   .champ .who{font-family:var(--display);font-weight:800;font-size:1.4rem;letter-spacing:.06em;color:var(--gold)}
   .champ .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  /* join code — big enough to read across a room */
+  .cup-code{border:1px dashed var(--home);border-radius:12px;padding:12px 14px;text-align:center;background:rgba(0,0,0,.15)}
+  .cup-code .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .cup-code .code{font-family:var(--display);font-weight:800;font-size:2.4rem;letter-spacing:.22em;color:var(--chalk);line-height:1.1;margin-top:2px}
+  .cup-code .hint{font-family:var(--mono);font-size:.56rem;letter-spacing:.06em;color:var(--dim);margin-top:4px}
+  /* tournament picker (more than one running) */
+  .cup-picker{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+  .cup-picker button{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-family:var(--mono);font-size:.64rem;letter-spacing:.04em;color:var(--dim);background:rgba(0,0,0,.15)}
+  .cup-picker button.on{color:var(--turf);background:var(--chalk);border-color:var(--chalk);font-weight:600}
+  /* pot / payout summary */
+  .cup-pot{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;background:var(--turf-2);font-family:var(--mono);font-size:.72rem;line-height:1.7}
+  .cup-pot .pot-row{display:flex;justify-content:space-between;gap:10px}
+  .cup-pot .pot-row.total{border-top:1px solid var(--line);margin-top:6px;padding-top:6px;color:var(--chalk)}
+  .cup-pot .pot-warn{color:var(--red)}
+  .cup-pot .pot-left{color:var(--yellow)}
+  .payrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+  .payrow label{font-family:var(--mono);font-size:.62rem;color:var(--dim)}
+  .payrow input{width:66px;padding:8px 6px;text-align:right}
+  .payrow .pay-dollars{font-family:var(--mono);font-size:.74rem;color:var(--home);min-width:52px;text-align:right}
+  /* ledger */
+  .led-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-family:var(--mono);font-size:.72rem}
+  .led-row .nm{font-family:var(--body);font-size:.9rem}
+  .led-row .sub2{font-size:.56rem;letter-spacing:.05em;color:var(--dim);margin-top:2px}
+  .led-row .pay{color:var(--gold);font-size:.7rem}
+  .led-paid{color:var(--home)}
+  .led-unpaid{color:var(--yellow)}
+  .led-row .led-toggle{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
 
   /* tab bar */
   nav{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--turf-2)}
@@ -397,6 +424,7 @@
         <button class="btn btn--go" id="startBtn" style="margin-top:20px">Start match</button>
         <button class="btn" id="manualBtn" style="margin-top:10px">Log a finished game</button>
         <button class="btn" id="cupBtn" style="margin-top:10px">Run a tournament</button>
+        <button class="btn" id="joinCupBtn" style="margin-top:10px">Join a tournament</button>
         <button class="btn btn--ghost" id="rulesBtn2" style="margin-top:10px">Binho rules</button>
         <div class="note" id="pregameNote"></div>
       </div>
@@ -521,16 +549,24 @@
     <!-- CUP -->
     <section class="view" id="v-cup">
       <div class="pad">
+        <div id="cupPicker" class="cup-picker" style="display:none"></div>
         <h2 id="cupName">The Binho Cup</h2>
         <div class="sub" id="cupSub"></div>
+        <div id="cupCodeBox" class="cup-code" style="display:none"></div>
         <div id="cupChampion"></div>
         <h3>Ready to play</h3>
         <div id="cupQueue" class="empty">No matches are ready yet.</div>
         <h3>Bracket</h3>
         <div id="cupBracket" class="bracket-scroll"></div>
+        <div id="cupLedgerSection" style="display:none">
+          <h3>Ledger</h3>
+          <div id="cupLedgerSummary" class="note"></div>
+          <div id="cupLedger"></div>
+        </div>
         <div id="cupManager" style="display:none;margin-top:20px">
-          <button class="btn btn--danger" id="cupResetBtn">Reset this tournament</button>
-          <div class="note">Only a manager can reset a confirmed cup. This clears the bracket for everyone.</div>
+          <button class="btn" id="cupRegenBtn">Reissue the join code</button>
+          <button class="btn btn--danger" id="cupResetBtn" style="margin-top:10px">Reset this tournament</button>
+          <div class="note">Only a manager can reissue a code or reset a confirmed cup. Reset clears the bracket for everyone.</div>
         </div>
       </div>
     </section>
@@ -648,6 +684,20 @@
       <div class="check"><input type="checkbox" id="cupCountSeason"><label for="cupCountSeason" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Count toward season standings</label></div>
       <div class="note" id="cupCountNote" style="display:none">Off for duos and teams — individual season records can't be derived from a team result.</div>
 
+      <h3>Buy-in</h3>
+      <div class="field"><label>Buy-in per entrant ($)</label><input type="number" id="cupBuyIn" min="0" max="10000" step="1" value="0" placeholder="0"></div>
+      <div class="note">Leave at 0 for a free tournament. The app tracks who has paid and the payouts — it never moves money.</div>
+      <div id="cupMoneyBlock" style="display:none">
+        <div class="field" style="margin-top:12px"><label>Payout structure</label><select id="cupPayoutPreset">
+          <option value="winner">Winner takes all</option>
+          <option value="70_30">Top two — 70 / 30</option>
+          <option value="50_30_20">Top three — 50 / 30 / 20</option>
+          <option value="custom">Custom</option>
+        </select></div>
+        <div id="cupPayoutRows"></div>
+        <div id="cupPayoutSummary" class="cup-pot"></div>
+      </div>
+
       <div class="field" style="margin-top:12px"><label>Seeding</label><select id="cupSeeding">
         <option value="random">Random</option>
         <option value="standings">By season standings</option>
@@ -661,6 +711,8 @@
     <div id="cupReviewScreen" style="display:none">
       <h2>Review the draw</h2>
       <div class="sub" id="cupReviewSub" style="margin-bottom:14px"></div>
+      <div id="cupReviewCode" class="cup-code" style="margin-bottom:14px"></div>
+      <div id="cupReviewMoney" class="cup-pot" style="display:none"></div>
       <div id="cupReviewBracket" class="bracket-scroll"></div>
       <button class="btn btn--go" id="cupConfirmBtn" style="margin-top:14px">Confirm draw</button>
       <button class="btn" id="cupRandomizeBtn" style="margin-top:10px">Randomize again</button>
@@ -675,6 +727,17 @@
     <div class="sub" style="margin-bottom:14px">Are you sure? This discards the current draw and generates a fresh one.</div>
     <button class="btn btn--danger" id="cupRandomConfirmBtn" style="margin-top:8px">Yes — discard and randomize</button>
     <button class="btn btn--ghost" id="cupRandomCancelBtn" style="margin-top:10px">Keep this draw</button>
+  </div>
+</div>
+
+<!-- join a tournament by code -->
+<div class="veil" id="joinCupVeil">
+  <div class="sheet">
+    <h2>Join a tournament</h2>
+    <div class="sub" style="margin-bottom:14px">Enter the five-character code shown on the tournament's Cup screen. This device will then play from its bracket.</div>
+    <div class="field"><label>Join code</label><input type="text" id="joinCodeInput" maxlength="7" autocomplete="off" autocapitalize="characters" placeholder="e.g. K7P3M" style="text-transform:uppercase;font-family:var(--mono);letter-spacing:.2em;font-size:1.2rem;text-align:center"></div>
+    <button class="btn btn--go" id="joinConfirmBtn" style="margin-top:8px">Join</button>
+    <button class="btn btn--ghost" id="joinCancelBtn" style="margin-top:10px">Cancel</button>
   </div>
 </div>
 
@@ -946,7 +1009,7 @@
         case 'photo':       return (p.name ? p.name + '’s photo' : 'a photo');
         case 'passcode':    return 'the passcode change';
         case 'createTournament': return 'the tournament';
-        case 'updateTournament': return p.op === 'editResult' ? 'the cup edit' : p.op === 'voidResult' ? 'discarding a cup result' : p.op === 'reopen' ? 'reopening a match' : p.op === 'reset' ? 'resetting the cup' : 'the cup result';
+        case 'updateTournament': return p.op === 'editResult' ? 'the cup edit' : p.op === 'voidResult' ? 'discarding a cup result' : p.op === 'reopen' ? 'reopening a match' : p.op === 'reset' ? 'resetting the cup' : p.op === 'markPaid' ? 'the buy-in change' : p.op === 'regenCode' ? 'the new join code' : 'the cup result';
         case 'claimMatch':  return 'claiming that match';
         case 'releaseMatch': return 'releasing that match';
         default:            return 'a change';
@@ -1048,8 +1111,8 @@
       setPasscode: function(which, code){ return write({ action: 'passcode', which: which, code: code }); },
       savePhoto: function(name, image){ return write({ action: 'photo', name: name, image: image }); },
       createTournament: function(t){ return write({ action: 'createTournament', tournament: t }); },
-      updateTournament: function(id, op, payload){ return write({ action: 'updateTournament', id: id, op: op, payload: payload }); },
-      claimMatch: function(id, matchId, clientId){ return write({ action: 'claimMatch', id: id, matchId: matchId, clientId: clientId }); },
+      updateTournament: function(id, op, payload, code){ return write({ action: 'updateTournament', id: id, op: op, payload: payload, code: code }); },
+      claimMatch: function(id, matchId, clientId, code){ return write({ action: 'claimMatch', id: id, matchId: matchId, clientId: clientId, code: code }); },
       releaseMatch: function(id, matchId){ return write({ action: 'releaseMatch', id: id, matchId: matchId }); },
       login: async function(code){
         if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
@@ -1749,6 +1812,41 @@
   }
   function activeCup(){ var ts = league.tournaments || []; return ts.length ? ts[ts.length - 1] : null; }
   function cupById(id){ return (league.tournaments || []).filter(function(t){ return t.id === id; })[0] || null; }
+
+  /* ---- which tournaments this device may see and act on ---- */
+  // A device "joins" a tournament by typing its code; the id+code are kept in localStorage.
+  // Managers/admins see and act on every tournament without joining.
+  function joinedList(){ var v; try { v = JSON.parse(localStorage.getItem('binho_joined')); } catch(e){} return Array.isArray(v) ? v : []; }
+  function saveJoined(list){ try { localStorage.setItem('binho_joined', JSON.stringify(list)); } catch(e){} }
+  function joinCodeFor(id){ var j = joinedList().filter(function(x){ return x.id === id; })[0]; return j ? j.code : ''; }
+  function hasJoined(id){ return !!joinCodeFor(id); }
+  function addJoined(id, code){
+    var list = joinedList().filter(function(x){ return x.id !== id; });
+    list.push({ id: id, code: String(code).toUpperCase() });
+    saveJoined(list);
+  }
+  function dropJoined(id){ saveJoined(joinedList().filter(function(x){ return x.id !== id; })); }
+  // the tournaments to show on the Cup tab: all of them for a manager, only the joined ones otherwise
+  function visibleCups(){
+    var ts = league.tournaments || [];
+    if(canManage()) return ts.slice();
+    return ts.filter(function(t){ return hasJoined(t.id); });
+  }
+  var selectedCupId = null;
+  function currentCup(){
+    var vis = visibleCups();
+    if(!vis.length) return null;
+    var sel = vis.filter(function(t){ return t.id === selectedCupId; })[0];
+    return sel || vis[vis.length - 1];   // default to the newest visible tournament
+  }
+  // the code to send with a claim/report: managers rely on their token, so '' is fine for them
+  function actingCode(id){ return canManage() ? '' : joinCodeFor(id); }
+  // a five-character code from the same unambiguous alphabet the server uses
+  function code5(){
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '';
+    for(var i = 0; i < 5; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+    return s;
+  }
   function claimLive(m){ return !!(m.claim && (Date.now() - m.claim.at) < 45*60*1000); }
   function findMatch(t, id){ var out=null; t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.id===id) out=m; }); }); return out; }
 
@@ -1759,7 +1857,7 @@
     if(btn) btn.classList.add('on');
     var view = $('v-' + name); if(view) view.classList.add('on');
   }
-  function showCupTab(show){ if(show === undefined) show = !!activeCup(); $('cupTab').style.display = show ? 'block' : 'none'; }
+  function showCupTab(show){ if(show === undefined) show = visibleCups().length > 0; $('cupTab').style.display = show ? 'block' : 'none'; }
 
   /* ---- bracket construction (single elimination; structure leaves room for double later) ---- */
   function nextPow2(n){ var p = 1; while(p < n) p *= 2; return p; }
@@ -1867,10 +1965,165 @@
     }).join('') + '</div>';
   }
 
+  /* ---- buy-in & payouts ---- */
+  // percentage presets; each place is manually overridable to a fixed dollar amount below
+  var PAYOUT_PRESETS = { winner:[100], '70_30':[70,30], '50_30_20':[50,30,20] };
+  var payoutPlaces = [];   // setup working state: [{ pct:<number|null>, fixed:<number|null> }]
+
+  function payoutBuyIn(){ return Math.max(0, Math.floor(parseFloat($('cupBuyIn').value) || 0)); }
+  function placeLabel(i){ return ['1st','2nd','3rd','4th','5th','6th','7th','8th'][i] || ((i+1) + 'th'); }
+
+  // Dollar payouts from the pot. Rounding drift lands on first place when the structure is meant
+  // to spend the whole pot; a deliberate under-allocation is surfaced as leftover instead of hidden.
+  function computePayouts(buyIn, n, places){
+    var pot = buyIn * n;
+    var targets = places.map(function(p){
+      if(p.fixed != null && p.fixed !== '') return Math.max(0, +p.fixed || 0);
+      return pot * Math.max(0, +p.pct || 0) / 100;
+    });
+    var rawSum = targets.reduce(function(s, x){ return s + x; }, 0);
+    var amounts = targets.map(function(x){ return Math.round(x); });
+    var over = rawSum > pot + 0.001;                  // intended payouts exceed the pot → invalid
+    var fullPot = Math.abs(rawSum - pot) < 0.5;       // meant to spend it all (presets, or custom hitting the pot)
+    if(!over && fullPot && amounts.length){
+      amounts[0] += pot - amounts.reduce(function(s, x){ return s + x; }, 0);   // rounding onto first place
+    }
+    var total = amounts.reduce(function(s, x){ return s + x; }, 0);
+    return { pot: pot, amounts: amounts, total: total, leftover: pot - total, over: over };
+  }
+
+  function seedPayoutFromPreset(){
+    var preset = $('cupPayoutPreset').value;
+    if(preset === 'custom'){ if(!payoutPlaces.length) payoutPlaces = PAYOUT_PRESETS['50_30_20'].map(function(p){ return { pct:p, fixed:null }; }); return; }
+    payoutPlaces = PAYOUT_PRESETS[preset].map(function(pct){ return { pct: pct, fixed: null }; });
+  }
+  function renderPayoutRows(){
+    $('cupPayoutRows').innerHTML = payoutPlaces.map(function(p, i){
+      return '<div class="payrow"><label>' + placeLabel(i) + '</label>' +
+        '<input type="number" min="0" max="100" step="1" data-paypct="' + i + '" placeholder="%" value="' + (p.fixed != null ? '' : (p.pct == null ? '' : p.pct)) + '">' +
+        '<input type="number" min="0" step="1" data-payfix="' + i + '" placeholder="$ fixed" value="' + (p.fixed != null ? p.fixed : '') + '"></div>';
+    }).join('');
+  }
+  function renderPayoutSummary(){
+    if(!$('cupPayoutSummary')) return null;
+    var buyIn = payoutBuyIn(), n = cupEntrants.length;
+    var res = computePayouts(buyIn, n, payoutPlaces);
+    var html = '<div class="pot-row"><span>Pot ($' + buyIn + ' × ' + n + ' entrant' + (n===1?'':'s') + ')</span><span>$' + res.pot + '</span></div>';
+    payoutPlaces.forEach(function(p, i){ html += '<div class="pot-row"><span>' + placeLabel(i) + '</span><span>$' + (res.amounts[i] || 0) + '</span></div>'; });
+    html += '<div class="pot-row total"><span>Paid out</span><span>$' + res.total + '</span></div>';
+    if(res.over) html += '<div class="pot-row pot-warn"><span>Over the pot by</span><span>$' + (res.total - res.pot) + '</span></div>';
+    else if(res.leftover > 0) html += '<div class="pot-row pot-left"><span>Leftover, not paid out</span><span>$' + res.leftover + '</span></div>';
+    $('cupPayoutSummary').innerHTML = html;
+    return res;
+  }
+  function renderMoneySetup(){
+    var on = payoutBuyIn() > 0;
+    $('cupMoneyBlock').style.display = on ? 'block' : 'none';
+    if(!on) return;
+    seedPayoutFromPreset();
+    renderPayoutRows();
+    renderPayoutSummary();
+  }
+
+  /* ---- finishing order, for completion payouts (single elimination) ---- */
+  // champion first, then losers by the round they fell in (later round = better finish),
+  // ties within a round broken by seed. So 2nd = final loser, 3rd/4th = the semifinal losers.
+  function tournamentPlacements(t){
+    if(!t.rounds || !t.rounds.length) return [];
+    var seed = {}; (t.entrants || []).forEach(function(e, i){ seed[e.name] = i; });
+    var out = [], last = t.rounds[t.rounds.length - 1][0];
+    if(last && last.winner) out.push(last.winner);
+    for(var r = t.rounds.length - 1; r >= 0; r--){
+      var losers = [];
+      t.rounds[r].forEach(function(m){
+        if(m.played && !m.bye && m.winner && m.a && m.b){ losers.push(m.winner === m.a ? m.b : m.a); }
+      });
+      losers.sort(function(a, b){ return (seed[a] == null ? 999 : seed[a]) - (seed[b] == null ? 999 : seed[b]); });
+      losers.forEach(function(nm){ if(nm && out.indexOf(nm) === -1) out.push(nm); });
+    }
+    return out;
+  }
+  function cupEntrantMembers(t, name){ var e = (t.entrants || []).filter(function(x){ return x.name === name; })[0]; return e && e.members ? e.members.slice() : []; }
+  function shortWhen(ts){ try { return new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric' }); } catch(e){ return ''; } }
+
+  /* ---- Cup tab: picker, join code, ledger ---- */
+  function renderCupPicker(vis, current){
+    var el = $('cupPicker');
+    if(vis.length <= 1){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'flex';
+    el.innerHTML = vis.map(function(t){
+      return '<button data-cupsel="' + t.id + '"' + (t.id === current.id ? ' class="on"' : '') + '>' + esc(t.name) + (t.status === 'done' ? ' ✓' : '') + '</button>';
+    }).join('');
+  }
+  function renderCupCode(t){
+    var box = $('cupCodeBox');
+    if(!t.code){ box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = '<div class="lbl">Join code</div><div class="code">' + esc(t.code) + '</div>' +
+      '<div class="hint">Enter this on “Join a tournament” to score from another device</div>';
+  }
+  function renderLedger(t){
+    var sec = $('cupLedgerSection');
+    if(!(t.buyIn > 0)){ sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    var entrants = t.entrants || [], ledger = t.ledger || {};
+    var amounts = (t.payout && t.payout.amounts) || [];
+    var placements = t.status === 'done' ? tournamentPlacements(t) : [];
+    var payFor = {}; placements.forEach(function(nm, i){ if(amounts[i] != null && amounts[i] > 0) payFor[nm] = amounts[i]; });
+    var paidCount = 0, collected = 0;
+    $('cupLedger').innerHTML = entrants.map(function(e){
+      var l = ledger[e.name] || {}, paid = !!l.paid;
+      if(paid){ paidCount++; collected += t.buyIn; }
+      var membersSub = (t.entryType !== 'singles' && e.members && e.members.length) ? '<div class="sub2">' + esc(e.members.join(', ')) + '</div>' : '';
+      var payTag = payFor[e.name] ? ' <span class="pay">$' + payFor[e.name] + '</span>' : '';
+      var status = paid
+        ? '<span class="led-paid">Paid</span>' + (l.by ? ' · ' + esc(l.by) + (l.at ? ' · ' + shortWhen(l.at) : '') : '')
+        : '<span class="led-unpaid">Unpaid</span>';
+      var btn = canManage() ? '<button class="led-toggle" data-paid="' + esc(e.name) + '" data-now="' + (paid ? '1' : '0') + '">' + (paid ? 'Mark unpaid' : 'Mark paid') + '</button>' : '';
+      return '<div class="led-row"><div><div class="nm">' + esc(e.name) + payTag + '</div>' + membersSub +
+        '<div class="sub2">' + status + '</div></div><div>' + btn + '</div></div>';
+    }).join('');
+    var owe = entrants.length - paidCount, pot = t.buyIn * entrants.length;
+    $('cupLedgerSummary').innerHTML = 'Collected $' + collected + ' of $' + pot + ' · $' + (pot - collected) + ' outstanding · ' +
+      (owe ? (owe + ' still owe' + (owe === 1 ? 's' : '')) : 'everyone has paid');
+  }
+  async function cupMarkPaid(name, paid){
+    if(!requireManage()) return;
+    var t = currentCup(); if(!t) return;
+    t.ledger = t.ledger || {};
+    if(paid) t.ledger[name] = { paid:true, by: role, at: Date.now() }; else delete t.ledger[name];   // optimistic
+    renderCup();
+    var r = await Api.updateTournament(t.id, 'markPaid', { entrant: name, paid: paid });
+    if(r && r.state){ applyState(r.state); renderAll(); }
+    else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+  }
+  async function cupRegenCode(){
+    if(!requireManage()) return;
+    var t = currentCup(); if(!t) return;
+    if(!confirm('Reissue the join code for “' + t.name + '”? The current code stops working — anyone scoring on another device must rejoin with the new one.')) return;
+    var r = await Api.updateTournament(t.id, 'regenCode', {});
+    if(r && r.state){ applyState(r.state); var code = (r.data && r.data.code) || (cupById(t.id) || {}).code; if(code) addJoined(t.id, code); renderAll(); if(code) toast('New join code: ' + code); }
+    else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+  }
+
+  /* ---- joining a tournament by code ---- */
+  function openJoinCup(){ $('joinCodeInput').value = ''; $('joinCupVeil').classList.add('open'); setTimeout(function(){ try { $('joinCodeInput').focus(); } catch(e){} }, 60); }
+  async function submitJoinCup(){
+    var code = ($('joinCodeInput').value || '').trim().toUpperCase();
+    if(code.length < 4){ toast('Enter the join code'); return; }
+    var s = await Api.getState(); if(s) applyState(s);   // match against the freshest list
+    var t = (league.tournaments || []).filter(function(x){ return String(x.code || '').toUpperCase() === code; })[0];
+    if(!t){ toast('No tournament found for that code'); return; }
+    addJoined(t.id, code);
+    selectedCupId = t.id;
+    $('joinCupVeil').classList.remove('open');
+    renderAll(); gotoView('cup');
+    toast('Joined ' + t.name);
+  }
+
   /* ---- setup form ---- */
   function openCupSetup(){
-    if(!requireManage()) return;
-    if(activeCup()){ toast('A tournament is already running — reset it first'); gotoView('cup'); return; }
+    if(!requireManage()) return;   // several tournaments may run at once — no single-cup guard
     cupEntrants = []; cupTeamMembers = []; cupDraft = null;
     $('cupNameInput').value = 'Binho Cup — ' + new Date().toLocaleString(undefined, {month:'long'});
     $('cupEntryType').value = 'singles';
@@ -1878,6 +2131,7 @@
     $('cupClock').value = league.cfg.clockMin; $('cupBoards').value = 2;
     $('cupLimit').value = league.cfg.scoreLimit; $('cupSd').value = league.cfg.sdScore;
     $('cupPowerups').checked = false; $('cupCountSeason').checked = false; $('cupSeeding').value = 'random';
+    $('cupBuyIn').value = 0; $('cupPayoutPreset').value = '50_30_20'; payoutPlaces = []; renderMoneySetup();
     $('cupFormScreen').style.display = 'block'; $('cupReviewScreen').style.display = 'none';
     cupEntryChanged();
     $('cupSetupVeil').classList.add('open');
@@ -1918,6 +2172,7 @@
       }).join('') + '</div>';
     }
     $('cupEntrantsUI').innerHTML = html;
+    if(payoutBuyIn() > 0) renderPayoutSummary();   // pot scales with the entrant count
   }
   function toggleSingle(name){
     var i = cupEntrants.map(function(e){ return e.name; }).indexOf(name);
@@ -1947,11 +2202,17 @@
   function cupGenerate(){
     var type = $('cupEntryType').value;
     if(cupEntrants.length < 2){ toast('Need at least two entrants'); return; }
+    var buyIn = payoutBuyIn();
+    if(buyIn > 0){
+      var pc = computePayouts(buyIn, cupEntrants.length, payoutPlaces);
+      if(pc.over){ toast('Payouts are $' + (pc.total - pc.pot) + ' over the pot — lower them first'); return; }
+    }
     var seeded = seedEntrants(cupEntrants, $('cupSeeding').value);
     var tid = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
     cupDraft = {
       id: tid,
       name: ($('cupNameInput').value || '').trim() || 'Binho Cup',
+      code: code5(),
       format: $('cupFormat').value,
       entryType: type,
       teamSize: type==='teams' ? teamSize() : (type==='duos' ? 2 : 1),
@@ -1967,6 +2228,9 @@
       status: 'active',
       entrants: seeded,
       rounds: buildBracket(tid, seeded),
+      buyIn: buyIn,
+      payout: buyIn > 0 ? { preset: $('cupPayoutPreset').value, places: payoutPlaces.map(function(p){ return { pct:p.pct, fixed:p.fixed }; }), amounts: computePayouts(buyIn, seeded.length, payoutPlaces).amounts } : null,
+      ledger: {},
       champion: null,
       created: Date.now()
     };
@@ -1976,30 +2240,48 @@
   function renderReview(){
     var t = cupDraft, N = t.entrants.length, byes = (t.rounds[0].length * 2) - N;
     $('cupReviewSub').textContent = t.name + ' · ' + N + ' entrants' + (byes ? ' · ' + byes + ' bye' + (byes>1?'s':'') : '') + ' · ' + t.boards + ' board' + (t.boards>1?'s':'');
+    $('cupReviewCode').innerHTML = '<div class="lbl">Join code</div><div class="code">' + esc(t.code) + '</div><div class="hint">Players enter this to score from their own device</div>';
+    var money = $('cupReviewMoney');
+    if(t.buyIn > 0 && t.payout){
+      var html = '<div class="pot-row"><span>Pot ($' + t.buyIn + ' × ' + N + ')</span><span>$' + (t.buyIn * N) + '</span></div>';
+      t.payout.amounts.forEach(function(a, i){ html += '<div class="pot-row"><span>' + placeLabel(i) + '</span><span>$' + a + '</span></div>'; });
+      var paid = t.payout.amounts.reduce(function(s, x){ return s + x; }, 0), left = t.buyIn * N - paid;
+      html += '<div class="pot-row total"><span>Paid out</span><span>$' + paid + '</span></div>';
+      if(left > 0) html += '<div class="pot-row pot-left"><span>Leftover, not paid out</span><span>$' + left + '</span></div>';
+      money.innerHTML = html; money.style.display = 'block';
+    } else money.style.display = 'none';
     $('cupReviewBracket').innerHTML = bracketHTML(t);
   }
   async function cupConfirm(){
     var t = cupDraft; if(!t) return;
     league.tournaments = (league.tournaments || []).concat([t]);   // optimistic
+    selectedCupId = t.id;
+    addJoined(t.id, t.code);   // the creating device joins its own cup, so it keeps access if signed out
     $('cupSetupVeil').classList.remove('open');
     renderCup(); gotoView('cup');
     var r = await Api.createTournament(t);
-    if(r && r.state){ applyState(r.state); renderAll(); }
+    if(r && r.state){ applyState(r.state); var nt = cupById(t.id); if(nt && nt.code) addJoined(nt.id, nt.code); renderAll(); }
     else if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } }
     else if(r && (r.queued || r.offline)) toast('Draw saved — will sync when reconnected');
   }
 
   /* ---- Cup view ---- */
   function renderCup(){
-    var t = activeCup();
-    showCupTab(!!t);
-    if(!t){ if($('v-cup').classList.contains('on')) gotoView('board'); return; }
+    var vis = visibleCups();
+    showCupTab(vis.length > 0);
+    if(!vis.length){ if($('v-cup').classList.contains('on')) gotoView('board'); return; }
+    var t = currentCup();
+    selectedCupId = t.id;
+    renderCupPicker(vis, t);
     var done = t.status === 'done';
     $('cupName').textContent = t.name;
-    $('cupSub').textContent = (t.entrants||[]).length + ' entrants · ' + entryLabel(t) + ' · ' + t.boards + ' board' + (t.boards>1?'s':'') + (done ? ' · complete' : '');
+    $('cupSub').textContent = (t.entrants||[]).length + ' entrants · ' + entryLabel(t) + ' · ' + t.boards + ' board' + (t.boards>1?'s':'') +
+      (t.buyIn > 0 ? ' · $' + t.buyIn + ' buy-in' : '') + (done ? ' · complete' : '');
+    renderCupCode(t);
     $('cupChampion').innerHTML = done && t.champion ? '<div class="champ"><div class="lbl">Champion</div><div class="who">' + esc(t.champion) + '</div></div>' : '';
     renderCupQueue(t);
     $('cupBracket').innerHTML = bracketHTML(t);
+    renderLedger(t);
     $('cupManager').style.display = canManage() ? 'block' : 'none';
   }
   function renderCupQueue(t){
@@ -2028,11 +2310,12 @@
 
   /* ---- playing a cup match on the shared live board ---- */
   async function cupPlay(matchId){
-    var t = activeCup(); if(!t) return;
+    var t = currentCup(); if(!t) return;
+    if(!canManage() && !hasJoined(t.id)){ toast('Join this tournament first — enter its code on the New match page'); return; }
     var m = findMatch(t, matchId);
     if(!m || !m.a || !m.b || m.played){ toast('That match is not playable'); return; }
     if(claimLive(m) && m.claim.by !== clientId()){ toast('Already claimed on board ' + m.claim.board); return; }
-    var r = await Api.claimMatch(t.id, matchId, clientId());
+    var r = await Api.claimMatch(t.id, matchId, clientId(), actingCode(t.id));
     if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } return; }
     if(r && (r.queued || r.offline)){ toast('Reconnect to claim a match'); return; }   // claiming must be atomic on the server
     if(r && r.state){ applyState(r.state); renderAll(); }
@@ -2049,7 +2332,9 @@
       mode: t.name, belt:false,
       limit: t.rules.scoreLimit, left: t.rules.clockMin * 60, sdScore: t.rules.sdScore,
       running:false, sd:false, over:false, htH:0, htA:0,
-      tourney: { id: t.id, matchId: matchId, cup: t.name, board: board, countSeason: t.countSeason && t.entryType === 'singles' }
+      tourney: { id: t.id, matchId: matchId, cup: t.name, board: board, countSeason: t.countSeason && t.entryType === 'singles',
+        homeMembers: t.entryType !== 'singles' ? cupEntrantMembers(t, m.a) : [],
+        awayMembers: t.entryType !== 'singles' ? cupEntrantMembers(t, m.b) : [] }
     };
     undoStack = [];
     gotoView('board');
@@ -2070,6 +2355,7 @@
     var rec = recordFromGame(g);
     rec.tournament = g.tourney.cup; rec.mode = g.tourney.cup; rec.belt = false;
     rec.official = !!g.tourney.countSeason;   // counts only when the cup opted in AND it is singles
+    rec.homeMembers = g.tourney.homeMembers || []; rec.awayMembers = g.tourney.awayMembers || [];   // so individual records survive
     var tid = g.tourney.id, payload = { matchId: g.tourney.matchId, sh: g.sh, sa: g.sa, winner: winner };
     // optimistic: log the game and advance the local bracket
     league.matches.unshift(rec);
@@ -2081,7 +2367,7 @@
     // send both writes and apply only the final state to avoid a mid-flight flicker
     (async function(){
       var r1 = await Api.recordMatch(rec);
-      var r2 = await Api.updateTournament(tid, 'result', payload);
+      var r2 = await Api.updateTournament(tid, 'result', payload, actingCode(tid));
       if(r2 && r2.state){ applyState(r2.state); renderAll(); }
       else if(r1 && r1.state){ applyState(r1.state); renderAll(); }
       if((r1 && r1.refused) || (r2 && r2.refused)){
@@ -2092,18 +2378,20 @@
   }
   async function cupRelease(matchId){
     if(!requireManage()) return;
-    var t = activeCup(); if(!t) return;
+    var t = currentCup(); if(!t) return;
     var r = await Api.releaseMatch(t.id, matchId);
     if(r && r.state){ applyState(r.state); renderAll(); }
     else if(r && r.refused){ toast(r.error); }
   }
   async function cupReset(){
     if(!requireManage()) return;
-    var t = activeCup(); if(!t) return;
+    var t = currentCup(); if(!t) return;
     if(!confirm('Reset “' + t.name + '”? This clears the bracket for everyone.')) return;
     var id = t.id;
     league.tournaments = (league.tournaments || []).filter(function(x){ return x.id !== id; });
-    renderCup(); if(!activeCup()) gotoView('board');
+    dropJoined(id);
+    if(selectedCupId === id) selectedCupId = null;
+    renderCup(); if(!visibleCups().length) gotoView('board');
     var r = await Api.updateTournament(id, 'reset');
     if(r && r.state){ applyState(r.state); renderAll(); }
     else if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } }
@@ -2152,7 +2440,7 @@
   }
   async function cupReopen(matchId){
     if(!requireManage()) return;
-    var t = activeCup(); if(!t) return;
+    var t = currentCup(); if(!t) return;
     var m = findMatch(t, matchId); if(!m || !m.played) return;
     var chain = [], cur = m;
     while(cur){ chain.push(cur); if(cur.round >= t.rounds.length - 1) break; cur = downstreamMatch(t, cur); }
@@ -2300,6 +2588,7 @@
       manualEditId = null; manualEditMatch = null;
       if(orig && orig.tournament){                                  // a cup match: keep the bracket in step
         rec.tournament = orig.tournament; rec.official = orig.official; rec.mode = orig.mode || orig.tournament; rec.belt = false; rec.type = 'league';
+        rec.homeMembers = orig.homeMembers || []; rec.awayMembers = orig.awayMembers || [];   // don't drop team members on edit
         editCupMatch(orig, rec);
         return;
       }
@@ -2757,7 +3046,8 @@
     }
 
     // export mirrors the Log sheet exactly — discarded games live in their own sheet, so they are left out
-    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited','Tournament'];
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited','Tournament','HomeMembers','AwayMembers'];
+    var memberCell = function(v){ return Array.isArray(v) ? v.join(', ') : (v || ''); };
     var rows = active.map(function(m){
       var win = m.sh > m.sa ? m.home : m.away;
       var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
@@ -2767,7 +3057,8 @@
         m.yH||0, m.rH||0, m.syH||0, m.tH||0, m.ogH||0, (m.rH||0) + (isStandard(m) ? 0 : (m.ogH||0)),
         m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
         m.htH||0, m.htA||0,
-        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':'', m.tournament||''].join('\t');
+        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':'', m.tournament||'',
+        memberCell(m.homeMembers), memberCell(m.awayMembers)].join('\t');
     });
     $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
   }
@@ -2855,10 +3146,40 @@
     else if(b.dataset.release != null) cupRelease(b.dataset.release);
   });
   $('cupResetBtn').addEventListener('click', cupReset);
+  $('cupRegenBtn').addEventListener('click', cupRegenCode);
   $('cupBracket').addEventListener('click', function(e){
     var b = e.target.closest('[data-reopen]'); if(!b) return;
     cupReopen(b.dataset.reopen);
   });
+  $('cupPicker').addEventListener('click', function(e){
+    var b = e.target.closest('[data-cupsel]'); if(!b) return;
+    selectedCupId = b.dataset.cupsel; renderCup();
+  });
+  $('cupLedger').addEventListener('click', function(e){
+    var b = e.target.closest('[data-paid]'); if(!b) return;
+    cupMarkPaid(b.dataset.paid, b.dataset.now !== '1');   // toggle
+  });
+
+  /* ---- buy-in & payout setup wiring ---- */
+  $('cupBuyIn').addEventListener('input', renderMoneySetup);
+  $('cupPayoutPreset').addEventListener('change', function(){ seedPayoutFromPreset(); renderPayoutRows(); renderPayoutSummary(); });
+  $('cupPayoutRows').addEventListener('input', function(e){
+    var t = e.target;
+    if(t.dataset.paypct != null){
+      var i = +t.dataset.paypct; payoutPlaces[i].pct = t.value === '' ? null : +t.value; payoutPlaces[i].fixed = null;
+      var fx = $('cupPayoutRows').querySelector('[data-payfix="' + i + '"]'); if(fx) fx.value = '';
+      $('cupPayoutPreset').value = 'custom'; renderPayoutSummary();
+    } else if(t.dataset.payfix != null){
+      var j = +t.dataset.payfix; payoutPlaces[j].fixed = t.value === '' ? null : +t.value;
+      $('cupPayoutPreset').value = 'custom'; renderPayoutSummary();
+    }
+  });
+
+  /* ---- join a tournament ---- */
+  $('joinCupBtn').addEventListener('click', openJoinCup);
+  $('joinConfirmBtn').addEventListener('click', submitJoinCup);
+  $('joinCancelBtn').addEventListener('click', function(){ $('joinCupVeil').classList.remove('open'); });
+  $('joinCodeInput').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); submitJoinCup(); } });
 
   $('mType').addEventListener('change', manualType);
   $('mStdDecl').addEventListener('change', manualType);

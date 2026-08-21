@@ -33,7 +33,7 @@ var HEADERS = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Wi
   'CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech',
   'HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals',
   'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece',
-  'Time','Edited','Tournament'];   // appended last on purpose: Standings/Standard formulas reference columns by position
+  'Time','Edited','Tournament','HomeMembers','AwayMembers'];   // appended last on purpose: Standings/Standard formulas reference columns by position
 
 /* ============================ setup ============================ */
 
@@ -107,9 +107,9 @@ function route_(body){
     case 'passcode':    return needs_(body.token, 'admin',   function(){ return setPasscode_(body.which, body.code); });
     case 'createTournament': return needs_(body.token, 'manager', function(){ return createTournament_(body.tournament); });
     case 'updateTournament': return body.op === 'result'
-      ? updateTournament_(body.id, 'result', body.payload)   // reporting a result is open to guests
-      : needs_(body.token, 'manager', function(){ return updateTournament_(body.id, body.op, body.payload); }); // edit/void/reopen/reset
-    case 'claimMatch':   return claimMatch_(body.id, body.matchId, body.clientId);          // guest — under the lock, so atomic
+      ? updateTournament_(body.id, 'result', body.payload, { code: body.code, token: body.token })   // guest, but must have joined
+      : needs_(body.token, 'manager', function(){ return updateTournament_(body.id, body.op, body.payload, { token: body.token }); }); // edit/void/reopen/reset/markPaid/regenCode
+    case 'claimMatch':   return claimMatch_(body.id, body.matchId, body.clientId, { code: body.code, token: body.token });   // guest — under the lock, so atomic
     case 'releaseMatch': return needs_(body.token, 'manager', function(){ return releaseMatch_(body.id, body.matchId); });
     default:            return { ok:false, error:'Unknown action: ' + action };
   }
@@ -205,6 +205,26 @@ function randomCode_(blocks){
     out.push(s);
   }
   return out.join('-');
+}
+
+// A short tournament join code, five characters from the same unambiguous alphabet (no O/0,
+// no I/1) so it reads cleanly across a room. Kept clear of codes already in play.
+var JOIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function joinCode_(){
+  var s = '';
+  for(var i = 0; i < 5; i++) s += JOIN_ALPHABET.charAt(Math.floor(Math.random() * JOIN_ALPHABET.length));
+  return s;
+}
+function uniqueJoinCode_(taken){
+  var code, guard = 0;
+  do { code = joinCode_(); } while(taken[code] && ++guard < 50);
+  return code;
+}
+// codes currently held by other tournaments, so a new or regenerated one never collides
+function takenCodes_(exceptId){
+  var out = {};
+  readTournaments_().forEach(function(t){ if(t.code && t.id !== exceptId) out[String(t.code).toUpperCase()] = 1; });
+  return out;
 }
 
 /* ============================ state ============================ */
@@ -425,9 +445,15 @@ function matchToRow_(m){
     num_(m.yA), num_(m.rA), num_(m.syA), num_(m.tA), num_(m.ogA), num_(m.rA) + (standard ? 0 : num_(m.ogA)),
     num_(m.htH), num_(m.htA),
     m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || '',
-    formatTime_(m.ts), m.edited ? 'Yes' : '', m.tournament || ''
+    formatTime_(m.ts), m.edited ? 'Yes' : '', m.tournament || '',
+    membersCell_(m.homeMembers), membersCell_(m.awayMembers)
   ];
 }
+
+// team/duo member lists ride the Log as comma-separated names; empty for singles. Accept an
+// array or an already-joined string so re-writing an edited row never mangles them.
+function membersCell_(v){ return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
+function splitMembers_(v){ return v ? String(v).split(/\s*,\s*/).filter(function(x){ return x; }) : []; }
 
 function rowToMatch_(r){
   return {
@@ -438,7 +464,8 @@ function rowToMatch_(r){
     yA: num_(r[19]), rA: num_(r[20]), syA: num_(r[21]), tA: num_(r[22]), ogA: num_(r[23]),
     htH: num_(r[25]), htA: num_(r[26]),
     puH: r[27], puA: r[28], ecH: r[29], ecA: r[30], mvp: r[31],
-    edited: r[33] === 'Yes', tournament: r[34] || ''
+    edited: r[33] === 'Yes', tournament: r[34] || '',
+    homeMembers: splitMembers_(r[35]), awayMembers: splitMembers_(r[36])
   };
 }
 
@@ -512,6 +539,10 @@ function createTournament_(t){
   if(!t.rounds || !t.rounds.length) return { ok:false, error:'Tournament has no bracket' };
   t.status = 'active';
   t.created = t.created || Date.now();
+  // The join code is authoritative here: honour a clash-free client suggestion, otherwise mint one.
+  var taken = takenCodes_(t.id);
+  var suggested = t.code ? String(t.code).toUpperCase() : '';
+  t.code = (suggested && /^[A-Z0-9]{4,6}$/.test(suggested) && !taken[suggested]) ? suggested : uniqueJoinCode_(taken);
   writeTournament_(t);
   return { ok:true, state: readState_() };
 }
@@ -597,9 +628,20 @@ function tActiveClaims_(t){
   return used;
 }
 
-function claimMatch_(id, matchId, clientId){
+// A device may act on a tournament if it holds the join code, or if it is a signed-in
+// manager/admin (who can run any tournament without joining).
+function tournamentAuthed_(t, ctx){
+  ctx = ctx || {};
+  var rank = { guest:0, manager:1, admin:2 };
+  if(rank[roleOf_(ctx.token)] >= 1) return true;
+  return !!(ctx.code && t.code && String(ctx.code).toUpperCase() === String(t.code).toUpperCase());
+}
+var JOIN_REFUSAL = 'Join this tournament first — enter its code on the New match page.';
+
+function claimMatch_(id, matchId, clientId, ctx){
   var t = loadTournament_(id);
   if(!t) return { ok:false, error:'That tournament is not on file' };
+  if(!tournamentAuthed_(t, ctx)) return { ok:false, error:JOIN_REFUSAL };
   var m = tMatch_(t, matchId);
   if(!m) return { ok:false, error:'That match is not in the bracket' };
   if(m.played) return { ok:false, error:'That match is already finished' };
@@ -629,15 +671,40 @@ function releaseMatch_(id, matchId){
 
 // One entry point for every bracket change. 'result' is open to guests; the corrective ops
 // (editResult, voidResult, reopen, reset) are gated to managers in the router.
-function updateTournament_(id, op, payload){
+function updateTournament_(id, op, payload, ctx){
   if(op === 'reset'){ deleteTournament_(id); return { ok:true, state: readState_() }; }
   var t = loadTournament_(id);
   if(!t) return { ok:false, error:'That tournament is not on file' };
-  if(op === 'result')     return tResult_(t, payload);
+  if(op === 'result'){
+    if(!tournamentAuthed_(t, ctx)) return { ok:false, error:JOIN_REFUSAL };
+    return tResult_(t, payload);
+  }
   if(op === 'editResult') return tEdit_(t, payload);
   if(op === 'voidResult') return tVoid_(t, payload);
   if(op === 'reopen')     return tReopen_(t, payload);
+  if(op === 'markPaid')   return tMarkPaid_(t, payload, ctx);
+  if(op === 'regenCode')  return tRegenCode_(t);
   return { ok:false, error:'Unknown tournament op: ' + op };
+}
+
+// record that an entrant has (or hasn't) paid their buy-in. Manager-gated in the router.
+function tMarkPaid_(t, payload, ctx){
+  if(!payload || !payload.entrant) return { ok:false, error:'No entrant supplied' };
+  t.ledger = t.ledger || {};
+  if(payload.paid){
+    t.ledger[payload.entrant] = { paid: true, by: roleOf_((ctx || {}).token), at: Date.now() };
+  } else {
+    delete t.ledger[payload.entrant];
+  }
+  writeTournament_(t);
+  return { ok:true, state: readState_() };
+}
+
+// mint a fresh join code (a manager does this if the old one leaks). Manager-gated in the router.
+function tRegenCode_(t){
+  t.code = uniqueJoinCode_(takenCodes_(t.id));
+  writeTournament_(t);
+  return { ok:true, state: readState_(), code: t.code };
 }
 
 function tFinish_(t){   // persist the tournament and its archive entry together
