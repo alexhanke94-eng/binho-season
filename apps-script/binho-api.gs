@@ -106,9 +106,9 @@ function route_(body){
     case 'wipe':        return needs_(body.token, 'admin',   function(){ return wipe_(); });
     case 'passcode':    return needs_(body.token, 'admin',   function(){ return setPasscode_(body.which, body.code); });
     case 'createTournament': return needs_(body.token, 'manager', function(){ return createTournament_(body.tournament); });
-    case 'updateTournament': return body.op === 'reset'
-      ? needs_(body.token, 'manager', function(){ return resetTournament_(body.id); })
-      : updateTournament_(body.id, body.op, body.payload);   // reporting a result is open to guests
+    case 'updateTournament': return body.op === 'result'
+      ? updateTournament_(body.id, 'result', body.payload)   // reporting a result is open to guests
+      : needs_(body.token, 'manager', function(){ return updateTournament_(body.id, body.op, body.payload); }); // edit/void/reopen/reset
     case 'claimMatch':   return claimMatch_(body.id, body.matchId, body.clientId);          // guest — under the lock, so atomic
     case 'releaseMatch': return needs_(body.token, 'manager', function(){ return releaseMatch_(body.id, body.matchId); });
     default:            return { ok:false, error:'Unknown action: ' + action };
@@ -516,11 +516,6 @@ function createTournament_(t){
   return { ok:true, state: readState_() };
 }
 
-function resetTournament_(id){   // reset / close a confirmed tournament (manager)
-  deleteTournament_(id);
-  return { ok:true, state: readState_() };
-}
-
 // find a match anywhere in the bracket by its id
 function tMatch_(t, matchId){
   for(var r = 0; r < t.rounds.length; r++){
@@ -529,16 +524,66 @@ function tMatch_(t, matchId){
   return null;
 }
 
-// push every decided winner into the slot it feeds in the next round (single elimination)
+// Recompute every fed slot from its feeders' winners. Setting a slot from a winner AND
+// clearing it when the feeder has no winner keeps the bracket correct when a result is
+// changed, discarded, or reopened — not just when one is first reported. Round 0 is seeded
+// directly from the entrants, so it is never recomputed.
 function tFeedForward_(t){
-  for(var r = 0; r < t.rounds.length - 1; r++){
+  for(var r = 1; r < t.rounds.length; r++){
     t.rounds[r].forEach(function(m){
-      if(m.winner){
-        var nm = t.rounds[r + 1][Math.floor(m.index / 2)];
-        if(m.index % 2 === 0) nm.a = m.winner; else nm.b = m.winner;
-      }
+      var f1 = t.rounds[r - 1][m.index * 2], f2 = t.rounds[r - 1][m.index * 2 + 1];
+      m.a = f1.winner || null;
+      m.b = f2.winner || null;
     });
   }
+}
+
+// the match a given match feeds into, or null if it is the final
+function tDownstream_(t, m){
+  if(m.round >= t.rounds.length - 1) return null;
+  return t.rounds[m.round + 1][Math.floor(m.index / 2)];
+}
+
+// set or clear the champion/done state from the final, wherever the bracket now stands
+function recomputeChampion_(t){
+  var last = t.rounds[t.rounds.length - 1][0];
+  if(last && last.played && last.winner){
+    if(t.status !== 'done') t.closed = Date.now();
+    t.status = 'done'; t.champion = last.winner;
+  } else {
+    t.status = 'active'; t.champion = null; t.closed = null;
+  }
+}
+
+// keep the Past-seasons archive entry in step with the tournament's state
+function syncTournamentArchive_(t){
+  var state = readState_();
+  state.archives = state.archives || [];
+  var idx = -1;
+  for(var i = 0; i < state.archives.length; i++){ if(state.archives[i].tournamentId === t.id){ idx = i; break; } }
+  if(t.status === 'done' && t.champion){
+    var games = 0;
+    t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.played && !m.bye) games++; }); });
+    var entry = { name: t.name, tournamentId: t.id, type: 'tournament', closed: t.closed || Date.now(),
+      champion: t.champion, games: games, entrants: (t.entrants || []).length };
+    if(idx >= 0) state.archives[idx] = entry; else state.archives.unshift(entry);
+  } else if(idx >= 0){ state.archives.splice(idx, 1); }
+  writeState_(state);
+}
+
+// move a played cup match's Log row to Discarded, matched by cup name + the two entrants
+function tMoveLogToDiscard_(cup, a, b){
+  var log = getLogSheet_();
+  var rows = log.getDataRange().getValues();
+  for(var i = rows.length - 1; i >= 1; i--){
+    var r = rows[i];
+    if(String(r[34]) === cup && ((r[3] === a && r[4] === b) || (r[3] === b && r[4] === a))){
+      getDiscardSheet_().appendRow(r);
+      log.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
 }
 
 // board number -> matchId, for claims that are live (not played, not expired)
@@ -582,11 +627,28 @@ function releaseMatch_(id, matchId){
   return { ok:true, state: readState_() };
 }
 
-// report a played result, advance the winner, and finish + archive when the final is done
+// One entry point for every bracket change. 'result' is open to guests; the corrective ops
+// (editResult, voidResult, reopen, reset) are gated to managers in the router.
 function updateTournament_(id, op, payload){
-  if(op !== 'result') return { ok:false, error:'Unknown tournament op: ' + op };
+  if(op === 'reset'){ deleteTournament_(id); return { ok:true, state: readState_() }; }
   var t = loadTournament_(id);
   if(!t) return { ok:false, error:'That tournament is not on file' };
+  if(op === 'result')     return tResult_(t, payload);
+  if(op === 'editResult') return tEdit_(t, payload);
+  if(op === 'voidResult') return tVoid_(t, payload);
+  if(op === 'reopen')     return tReopen_(t, payload);
+  return { ok:false, error:'Unknown tournament op: ' + op };
+}
+
+function tFinish_(t){   // persist the tournament and its archive entry together
+  recomputeChampion_(t);
+  writeTournament_(t);
+  syncTournamentArchive_(t);
+  return { ok:true, state: readState_() };
+}
+
+// report a played result and advance the winner
+function tResult_(t, payload){
   var m = tMatch_(t, payload && payload.matchId);
   if(!m) return { ok:false, error:'That match is not in the bracket' };
   if(m.played) return { ok:true, state: readState_(), duplicate:true };   // idempotent — another phone reported first
@@ -594,29 +656,56 @@ function updateTournament_(id, op, payload){
   m.winner = payload.winner || (m.sh > m.sa ? m.a : m.b);
   m.played = true; m.claim = null;
   tFeedForward_(t);
-
-  var last = t.rounds[t.rounds.length - 1][0];
-  if(last && last.played && last.winner){
-    t.status = 'done'; t.champion = last.winner; t.closed = Date.now();
-    archiveTournament_(t);
-  }
-  writeTournament_(t);
-  return { ok:true, state: readState_() };
+  return tFinish_(t);
 }
 
-// a finished cup joins Past seasons, just like a closed season
-function archiveTournament_(t){
-  var state = readState_();
-  state.archives = state.archives || [];
-  if(state.archives.some(function(a){ return a.tournamentId === t.id; })) return;   // never double-archive
-  var games = 0;
-  t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.played && !m.bye) games++; }); });
-  state.archives.unshift({
-    name: t.name, tournamentId: t.id, type: 'tournament',
-    closed: t.closed || Date.now(), champion: t.champion || '', games: games,
-    bracket: t.rounds, entrants: (t.entrants || []).length
+// change an already-played result. If it flips the winner and a later round has been played,
+// refuse — the manager must reopen that round first. Also replaces the Log row.
+function tEdit_(t, payload){
+  var m = tMatch_(t, payload && payload.matchId);
+  if(!m) return { ok:false, error:'That match is not in the bracket' };
+  if(m.bye) return { ok:false, error:'A bye cannot be edited' };
+  var sh = num_(payload.sh), sa = num_(payload.sa);
+  var newWinner = sh > sa ? m.a : (sa > sh ? m.b : null);
+  if(!newWinner) return { ok:false, error:'A cup match needs a winner' };
+  if(newWinner !== m.winner){
+    var d = tDownstream_(t, m);
+    if(d && d.played) return { ok:false, error:'A later round has already been played. Reopen it before changing this winner.' };
+  }
+  m.sh = sh; m.sa = sa; m.winner = newWinner; m.played = true;
+  tFeedForward_(t);
+  if(payload.match) putRow_(getLogSheet_(), payload.match.id, matchToRow_(payload.match));   // keep the Log in step
+  return tFinish_(t);
+}
+
+// discard a played result: roll the match back to the ready queue and move its Log row to
+// Discarded. Refuse if the next round has already been played.
+function tVoid_(t, payload){
+  var m = tMatch_(t, payload && payload.matchId);
+  if(!m) return { ok:false, error:'That match is not in the bracket' };
+  if(m.bye) return { ok:false, error:'A bye cannot be discarded' };
+  if(!m.played) return { ok:false, error:'That match has not been played' };
+  var d = tDownstream_(t, m);
+  if(d && d.played) return { ok:false, error:'A later round has already been played. Reopen it before discarding this result.' };
+  m.sh = null; m.sa = null; m.winner = null; m.played = false; m.claim = null;
+  tFeedForward_(t);   // clears the slot this match fed
+  if(payload.match){ removeRow_(getLogSheet_(), payload.match.id); putRow_(getDiscardSheet_(), payload.match.id, matchToRow_(payload.match)); }
+  return tFinish_(t);
+}
+
+// manager escape hatch: reopen a match AND every match downstream of it, discarding those
+// Log rows, so a wrong early result can be corrected after later rounds were already played.
+function tReopen_(t, payload){
+  var m = tMatch_(t, payload && payload.matchId);
+  if(!m) return { ok:false, error:'That match is not in the bracket' };
+  var chain = [], cur = m;
+  while(cur){ chain.push(cur); if(cur.round >= t.rounds.length - 1) break; cur = tDownstream_(t, cur); }
+  chain.forEach(function(x){
+    if(x.played && !x.bye && x.a && x.b) tMoveLogToDiscard_(t.name, x.a, x.b);
+    if(!x.bye){ x.played = false; x.winner = null; x.sh = null; x.sa = null; x.claim = null; }
   });
-  writeState_(state);
+  tFeedForward_(t);
+  return tFinish_(t);
 }
 
 /* ============================ photos ============================ */

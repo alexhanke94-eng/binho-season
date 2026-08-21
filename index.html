@@ -180,6 +180,7 @@
   .br-slot.win .s{color:var(--home)}
   .br-slot.bye{color:var(--dim);font-style:italic}
   .br-tag{font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);padding:2px 10px 6px}
+  .br-reopen{color:var(--yellow);font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:none}
   .champ{border:1px solid var(--gold);border-radius:12px;padding:14px;margin:6px 0 4px;text-align:center;background:rgba(214,178,74,.08)}
   .champ .who{font-family:var(--display);font-weight:800;font-size:1.4rem;letter-spacing:.06em;color:var(--gold)}
   .champ .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -945,7 +946,7 @@
         case 'photo':       return (p.name ? p.name + '’s photo' : 'a photo');
         case 'passcode':    return 'the passcode change';
         case 'createTournament': return 'the tournament';
-        case 'updateTournament': return 'the cup result';
+        case 'updateTournament': return p.op === 'editResult' ? 'the cup edit' : p.op === 'voidResult' ? 'discarding a cup result' : p.op === 'reopen' ? 'reopening a match' : p.op === 'reset' ? 'resetting the cup' : 'the cup result';
         case 'claimMatch':  return 'claiming that match';
         case 'releaseMatch': return 'releasing that match';
         default:            return 'a change';
@@ -1796,16 +1797,24 @@
     cupFeedForward({ rounds: rounds });   // propagate the round-1 byes into round 2
     return rounds;
   }
+  // recompute every fed slot from its feeders' winners (mirrors the server) so clearing a
+  // winner also clears its downstream slot — needed for edit / discard / reopen, not just advance
   function cupFeedForward(t){
-    for(var r = 0; r < t.rounds.length - 1; r++){
+    for(var r = 1; r < t.rounds.length; r++){
       t.rounds[r].forEach(function(m){
-        if(m.winner){
-          var nm = t.rounds[r+1][Math.floor(m.index/2)];
-          if(m.index % 2 === 0) nm.a = m.winner; else nm.b = m.winner;
-        }
+        var f1 = t.rounds[r-1][m.index*2], f2 = t.rounds[r-1][m.index*2+1];
+        m.a = f1.winner || null;
+        m.b = f2.winner || null;
       });
     }
   }
+  function cupByName(name){ return (league.tournaments || []).filter(function(t){ return t.name === name; })[0] || null; }
+  function bracketMatchFor(t, x, y){
+    var out = null;
+    t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(!m.bye && ((m.a===x && m.b===y) || (m.a===y && m.b===x))) out = m; }); });
+    return out;
+  }
+  function downstreamMatch(t, m){ return m.round >= t.rounds.length - 1 ? null : t.rounds[m.round + 1][Math.floor(m.index / 2)]; }
   // optimistic local advance — the server does the authoritative version identically
   function cupApplyResult(t, matchId, sh, sa, winner){
     var m = findMatch(t, matchId);
@@ -1847,7 +1856,9 @@
   function matchHTML(t, m){
     if(m.bye){ var adv = m.a || m.b; return '<div class="br-match">' + slotHTML(adv, '', true, false) + slotHTML('bye', '', false, true) + '<div class="br-tag">bye</div></div>'; }
     var aWin = m.played && m.winner === m.a, bWin = m.played && m.winner === m.b;
-    var tag = claimLive(m) ? '<div class="br-tag">On board ' + m.claim.board + '</div>' : '';
+    var tag = '';
+    if(claimLive(m)) tag = '<div class="br-tag">On board ' + m.claim.board + '</div>';
+    else if(m.played && canManage()) tag = '<div class="br-tag"><button class="br-reopen" data-reopen="' + m.id + '">Reopen</button></div>';
     return '<div class="br-match">' + slotHTML(m.a, m.sh, aWin, false) + slotHTML(m.b, m.sa, bWin, false) + tag + '</div>';
   }
   function bracketHTML(t){
@@ -2097,6 +2108,63 @@
     if(r && r.state){ applyState(r.state); renderAll(); }
     else if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } }
   }
+  /* ---- keeping the bracket consistent when a cup result is edited, discarded, or reopened ---- */
+  function plainEdit(rec){
+    var id = rec.id;
+    applyMatchChange('edit', rec, function(db){ for(var i=0;i<db.matches.length;i++){ if(db.matches[i].id===id){ db.matches[i]=rec; break; } } });
+    $('manualVeil').classList.remove('open'); toast('Match updated');
+  }
+  function editCupMatch(orig, rec){
+    var t = cupByName(orig.tournament);
+    var bm = t ? bracketMatchFor(t, orig.home, orig.away) : null;
+    if(!t || !bm){ plainEdit(rec); return; }        // tournament gone / not in the bracket → just edit the log
+    rec.home = bm.a; rec.away = bm.b;                // cup entrants are fixed — lock them to the bracket
+    var newWinner = rec.sh > rec.sa ? bm.a : (rec.sa > rec.sh ? bm.b : null);
+    if(!newWinner){ toast('A cup match needs a winner'); return; }
+    if(newWinner !== bm.winner){
+      var d = downstreamMatch(t, bm);
+      if(d && d.played){ toast('A later round has already been played — reopen it first'); return; }
+    }
+    $('manualVeil').classList.remove('open');
+    (async function(){
+      var r = await Api.updateTournament(t.id, 'editResult', { matchId: bm.id, sh: rec.sh, sa: rec.sa, winner: newWinner, match: rec });
+      if(r && r.state){ applyState(r.state); renderAll(); toast('Cup match updated'); }
+      else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+      else if(r && (r.queued || r.offline)) toast('Cup edit queued — will apply when reconnected');
+    })();
+  }
+  // returns true if it handled the delete (rolled back or refused); false to fall through to a plain delete
+  function voidCupMatch(m){
+    var t = cupByName(m.tournament);
+    var bm = t ? bracketMatchFor(t, m.home, m.away) : null;
+    if(!t || !bm) return false;
+    var d = downstreamMatch(t, bm);
+    if(d && d.played){ toast('A later round has already been played — reopen it first'); return true; }
+    if(!confirm('Discard this cup result? “' + m.home + ' vs ' + m.away + '” goes back to the queue to be replayed. It is kept as a discarded record.')) return true;
+    var rec = Object.assign({}, m); rec.discarded = true;
+    (async function(){
+      var r = await Api.updateTournament(t.id, 'voidResult', { matchId: bm.id, match: rec });
+      if(r && r.state){ applyState(r.state); renderAll(); toast('Cup result discarded — back to the queue'); }
+      else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+      else if(r && (r.queued || r.offline)) toast('Discard queued — will apply when reconnected');
+    })();
+    return true;
+  }
+  async function cupReopen(matchId){
+    if(!requireManage()) return;
+    var t = activeCup(); if(!t) return;
+    var m = findMatch(t, matchId); if(!m || !m.played) return;
+    var chain = [], cur = m;
+    while(cur){ chain.push(cur); if(cur.round >= t.rounds.length - 1) break; cur = downstreamMatch(t, cur); }
+    var later = chain.filter(function(x){ return x !== m && x.played && !x.bye; }).length;
+    var msg = 'Reopen ' + m.a + ' vs ' + m.b + (later ? ' and the ' + later + ' match' + (later>1?'es':'') + ' after it' : '') + '? Those results are discarded and go back to the queue.';
+    if(!confirm(msg)) return;
+    var r = await Api.updateTournament(t.id, 'reopen', { matchId: matchId });
+    if(r && r.state){ applyState(r.state); renderAll(); toast('Reopened — replay from here'); }
+    else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+    else if(r && (r.queued || r.offline)) toast('Reopen queued — will apply when reconnected');
+  }
+
   // shown on the record modal at full time; overrides the league-flavoured bits for a cup match
   function decorateRecordModal(){
     var tour = !!(game && game.tourney);
@@ -2118,6 +2186,7 @@
     manualEditId = null; manualEditMatch = null;
     $('manualTitle').textContent = 'Log a finished game';
     $('mSaveBtn').textContent = 'Record match';
+    $('mHome').disabled = $('mAway').disabled = $('mType').disabled = false;   // clear any cup-edit lock
     manualPool();
 
     fillSelect($('mPuH'), POWER_UPS, 'Choose…'); fillSelect($('mPuA'), POWER_UPS, 'Choose…');
@@ -2188,7 +2257,8 @@
     var sh = n('mSH'), sa = n('mSA');
     if(sh === sa){ toast('A finished match needs a winner'); return; }
 
-    var decl = !std || $('mStdDecl').checked;
+    var cupEdit = manualEditMatch && manualEditMatch.tournament;   // cup games carry no power-ups/event cards
+    var decl = (!std || $('mStdDecl').checked) && !cupEdit;
     if(decl && (!$('mPuH').value || !$('mEcH').value || !$('mPuA').value || !$('mEcA').value)){
       toast('Both players need a power up and an event card');
       return;
@@ -2224,15 +2294,16 @@
 
     if(manualEditId){
       rec.id = manualEditId;                                        // keep the same MatchID
-      if(manualEditMatch && manualEditMatch.entry !== 'manual') delete rec.entry;   // don't relabel a live game
+      var orig = manualEditMatch;
+      if(orig && orig.entry !== 'manual') delete rec.entry;         // don't relabel a live game
       rec.edited = true;
-      var editId = manualEditId;
       manualEditId = null; manualEditMatch = null;
-      applyMatchChange('edit', rec, function(db){
-        for(var i = 0; i < db.matches.length; i++){ if(db.matches[i].id === editId){ db.matches[i] = rec; break; } }
-      });
-      $('manualVeil').classList.remove('open');
-      toast('Match updated');
+      if(orig && orig.tournament){                                  // a cup match: keep the bracket in step
+        rec.tournament = orig.tournament; rec.official = orig.official; rec.mode = orig.mode || orig.tournament; rec.belt = false; rec.type = 'league';
+        editCupMatch(orig, rec);
+        return;
+      }
+      plainEdit(rec);
       return;
     }
 
@@ -2258,6 +2329,12 @@
     var std = isStandard(m);
     $('mType').value = std ? 'standard' : 'league';
     manualType();                        // rebuild the player pool + show/hide league-only for this type
+    if(m.tournament){                    // cup entrants may be off-roster (typed names, team names) — lock them in
+      $('mHome').innerHTML = '<option>' + esc(m.home) + '</option>';
+      $('mAway').innerHTML = '<option>' + esc(m.away) + '</option>';
+      $('mHome').disabled = $('mAway').disabled = $('mType').disabled = true;
+      $('mLeagueOnly').style.display = 'none';   // cup games carry no declarations/belt/official toggles
+    }
     var d = new Date(m.ts);
     $('mDate').value = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
     $('mTime').value = ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
@@ -2778,6 +2855,10 @@
     else if(b.dataset.release != null) cupRelease(b.dataset.release);
   });
   $('cupResetBtn').addEventListener('click', cupReset);
+  $('cupBracket').addEventListener('click', function(e){
+    var b = e.target.closest('[data-reopen]'); if(!b) return;
+    cupReopen(b.dataset.reopen);
+  });
 
   $('mType').addEventListener('change', manualType);
   $('mStdDecl').addEventListener('change', manualType);
@@ -2962,6 +3043,8 @@
     }
     var del = e.target.closest('[data-del]'); if(!del) return;
     if(!requireManage()) return;
+    var dm = league.matches.filter(function(m){ return m.id === del.dataset.del; })[0];
+    if(dm && dm.tournament && cupByName(dm.tournament) && voidCupMatch(dm)) return;   // cup match → roll the bracket back
     if(!confirm('Delete this match from the league record?')) return;
     commit(function(db){ db.matches = db.matches.filter(function(m){ return m.id !== del.dataset.del; }); });
   });
