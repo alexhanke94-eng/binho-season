@@ -24,6 +24,7 @@
 
 var LOG_SHEET     = 'Log';
 var DISCARD_SHEET = 'Discarded';   // kept records that count for nothing — physically out of Log
+var TOURN_SHEET   = 'Tournaments'; // one row per tournament, JSON in a cell
 var STATE_SHEET   = 'State';
 var PHOTO_SHEET   = 'Photos';
 var TOKEN_HOURS   = 12;
@@ -32,7 +33,7 @@ var HEADERS = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Wi
   'CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech',
   'HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals',
   'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece',
-  'Time','Edited'];   // appended last on purpose: Standings/Standard formulas reference columns by position
+  'Time','Edited','Tournament'];   // appended last on purpose: Standings/Standard formulas reference columns by position
 
 /* ============================ setup ============================ */
 
@@ -104,6 +105,12 @@ function route_(body){
     case 'season':      return needs_(body.token, 'admin',   function(){ return endSeason_(body.name, body.champion, body.table); });
     case 'wipe':        return needs_(body.token, 'admin',   function(){ return wipe_(); });
     case 'passcode':    return needs_(body.token, 'admin',   function(){ return setPasscode_(body.which, body.code); });
+    case 'createTournament': return needs_(body.token, 'manager', function(){ return createTournament_(body.tournament); });
+    case 'updateTournament': return body.op === 'reset'
+      ? needs_(body.token, 'manager', function(){ return resetTournament_(body.id); })
+      : updateTournament_(body.id, body.op, body.payload);   // reporting a result is open to guests
+    case 'claimMatch':   return claimMatch_(body.id, body.matchId, body.clientId);          // guest — under the lock, so atomic
+    case 'releaseMatch': return needs_(body.token, 'manager', function(){ return releaseMatch_(body.id, body.matchId); });
     default:            return { ok:false, error:'Unknown action: ' + action };
   }
 }
@@ -232,6 +239,7 @@ function readState_(){
   var raw = sheet.getRange('A1').getValue();
   var state = raw ? JSON.parse(raw) : blankState_();
   state.matches = readMatches_();
+  state.tournaments = readTournaments_();
   state.photoVersion = photoVersion_();   // the photos themselves come from the 'photos' action
   state.hasManager = !!PropertiesService.getScriptProperties().getProperty('managerHash');
   return state;
@@ -253,6 +261,7 @@ function writeState_(state){
   var copy = JSON.parse(JSON.stringify(state));
   delete copy.matches;        // matches live in the Log sheet
   delete copy.photos;         // photos live in the Photos sheet
+  delete copy.tournaments;    // tournaments live in the Tournaments sheet
   delete copy.photoVersion;   // derived, never stored
   delete copy.hasManager;
   getStateSheet_().getRange('A1').setValue(JSON.stringify(copy));
@@ -316,6 +325,7 @@ function wipe_(){
     sheet.setFrozenRows(1);
   });
   getPhotoSheet_().clear();
+  getTournSheet_().clear();
   return { ok:true, state: readState_() };
 }
 
@@ -415,7 +425,7 @@ function matchToRow_(m){
     num_(m.yA), num_(m.rA), num_(m.syA), num_(m.tA), num_(m.ogA), num_(m.rA) + (standard ? 0 : num_(m.ogA)),
     num_(m.htH), num_(m.htA),
     m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || '',
-    formatTime_(m.ts), m.edited ? 'Yes' : ''
+    formatTime_(m.ts), m.edited ? 'Yes' : '', m.tournament || ''
   ];
 }
 
@@ -428,7 +438,7 @@ function rowToMatch_(r){
     yA: num_(r[19]), rA: num_(r[20]), syA: num_(r[21]), tA: num_(r[22]), ogA: num_(r[23]),
     htH: num_(r[25]), htA: num_(r[26]),
     puH: r[27], puA: r[28], ecH: r[29], ecA: r[30], mvp: r[31],
-    edited: r[33] === 'Yes'
+    edited: r[33] === 'Yes', tournament: r[34] || ''
   };
 }
 
@@ -445,6 +455,168 @@ function readMatches_(){
   var disc = readMatchRows_(getDiscardSheet_());
   for(var i = 0; i < disc.length; i++) disc[i].discarded = true;
   return log.concat(disc).sort(function(a, b){ return b.ts - a.ts; });
+}
+
+/* ============================ tournaments ============================ */
+
+var CLAIM_TTL_MS = 45 * 60 * 1000;   // a claim older than this returns to the queue (a phone died mid-match)
+
+function getTournSheet_(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(TOURN_SHEET);
+  if(!sheet){ sheet = ss.insertSheet(TOURN_SHEET); sheet.appendRow(['id','status','updated','json']); sheet.setFrozenRows(1); sheet.hideSheet(); }
+  return sheet;
+}
+
+function readTournaments_(){
+  var rows = getTournSheet_().getDataRange().getValues();
+  var out = [];
+  for(var i = 1; i < rows.length; i++){
+    if(!rows[i][0]) continue;
+    try { out.push(JSON.parse(rows[i][3])); } catch(e){}
+  }
+  return out;
+}
+
+function tournRow_(sheet, id){
+  var last = sheet.getLastRow();
+  if(last < 2) return -1;
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for(var i = 0; i < ids.length; i++){ if(ids[i][0] === id) return i + 2; }
+  return -1;
+}
+
+function writeTournament_(t){
+  var sheet = getTournSheet_();
+  var row = [t.id, t.status || 'active', Date.now(), JSON.stringify(t)];
+  var r = tournRow_(sheet, t.id);
+  if(r > 0) sheet.getRange(r, 1, 1, row.length).setValues([row]);
+  else sheet.appendRow(row);
+}
+
+function loadTournament_(id){
+  var sheet = getTournSheet_();
+  var r = tournRow_(sheet, id);
+  if(r < 0) return null;
+  try { return JSON.parse(sheet.getRange(r, 4).getValue()); } catch(e){ return null; }
+}
+
+function deleteTournament_(id){
+  var sheet = getTournSheet_();
+  var r = tournRow_(sheet, id);
+  if(r > 0) sheet.deleteRow(r);
+}
+
+function createTournament_(t){
+  if(!t || !t.id || !t.name) return { ok:false, error:'Tournament is missing a name' };
+  if(!t.rounds || !t.rounds.length) return { ok:false, error:'Tournament has no bracket' };
+  t.status = 'active';
+  t.created = t.created || Date.now();
+  writeTournament_(t);
+  return { ok:true, state: readState_() };
+}
+
+function resetTournament_(id){   // reset / close a confirmed tournament (manager)
+  deleteTournament_(id);
+  return { ok:true, state: readState_() };
+}
+
+// find a match anywhere in the bracket by its id
+function tMatch_(t, matchId){
+  for(var r = 0; r < t.rounds.length; r++){
+    for(var i = 0; i < t.rounds[r].length; i++){ if(t.rounds[r][i].id === matchId) return t.rounds[r][i]; }
+  }
+  return null;
+}
+
+// push every decided winner into the slot it feeds in the next round (single elimination)
+function tFeedForward_(t){
+  for(var r = 0; r < t.rounds.length - 1; r++){
+    t.rounds[r].forEach(function(m){
+      if(m.winner){
+        var nm = t.rounds[r + 1][Math.floor(m.index / 2)];
+        if(m.index % 2 === 0) nm.a = m.winner; else nm.b = m.winner;
+      }
+    });
+  }
+}
+
+// board number -> matchId, for claims that are live (not played, not expired)
+function tActiveClaims_(t){
+  var now = Date.now(), used = {};
+  for(var r = 0; r < t.rounds.length; r++){
+    t.rounds[r].forEach(function(m){
+      if(m.claim && !m.played && (now - m.claim.at) < CLAIM_TTL_MS) used[m.claim.board] = m.id;
+    });
+  }
+  return used;
+}
+
+function claimMatch_(id, matchId, clientId){
+  var t = loadTournament_(id);
+  if(!t) return { ok:false, error:'That tournament is not on file' };
+  var m = tMatch_(t, matchId);
+  if(!m) return { ok:false, error:'That match is not in the bracket' };
+  if(m.played) return { ok:false, error:'That match is already finished' };
+  if(!m.a || !m.b) return { ok:false, error:'That match is not ready yet' };
+  var now = Date.now();
+  if(m.claim && (now - m.claim.at) < CLAIM_TTL_MS && m.claim.by !== clientId){
+    return { ok:false, error:'Already claimed on board ' + m.claim.board };   // the loser of a race sees this
+  }
+  var used = tActiveClaims_(t);
+  if(m.claim && m.claim.by === clientId) delete used[m.claim.board];   // reclaiming your own keeps the board
+  var board = 0;
+  for(var b = 1; b <= (t.boards || 1); b++){ if(!used[b]){ board = b; break; } }
+  if(!board) return { ok:false, error:'Every board is busy right now' };
+  m.claim = { by: clientId, at: now, board: board };
+  writeTournament_(t);
+  return { ok:true, state: readState_(), board: board };
+}
+
+function releaseMatch_(id, matchId){
+  var t = loadTournament_(id);
+  if(!t) return { ok:false, error:'That tournament is not on file' };
+  var m = tMatch_(t, matchId);
+  if(m) m.claim = null;
+  writeTournament_(t);
+  return { ok:true, state: readState_() };
+}
+
+// report a played result, advance the winner, and finish + archive when the final is done
+function updateTournament_(id, op, payload){
+  if(op !== 'result') return { ok:false, error:'Unknown tournament op: ' + op };
+  var t = loadTournament_(id);
+  if(!t) return { ok:false, error:'That tournament is not on file' };
+  var m = tMatch_(t, payload && payload.matchId);
+  if(!m) return { ok:false, error:'That match is not in the bracket' };
+  if(m.played) return { ok:true, state: readState_(), duplicate:true };   // idempotent — another phone reported first
+  m.sh = num_(payload.sh); m.sa = num_(payload.sa);
+  m.winner = payload.winner || (m.sh > m.sa ? m.a : m.b);
+  m.played = true; m.claim = null;
+  tFeedForward_(t);
+
+  var last = t.rounds[t.rounds.length - 1][0];
+  if(last && last.played && last.winner){
+    t.status = 'done'; t.champion = last.winner; t.closed = Date.now();
+    archiveTournament_(t);
+  }
+  writeTournament_(t);
+  return { ok:true, state: readState_() };
+}
+
+// a finished cup joins Past seasons, just like a closed season
+function archiveTournament_(t){
+  var state = readState_();
+  state.archives = state.archives || [];
+  if(state.archives.some(function(a){ return a.tournamentId === t.id; })) return;   // never double-archive
+  var games = 0;
+  t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.played && !m.bye) games++; }); });
+  state.archives.unshift({
+    name: t.name, tournamentId: t.id, type: 'tournament',
+    closed: t.closed || Date.now(), champion: t.champion || '', games: games,
+    bracket: t.rounds, entrants: (t.entrants || []).length
+  });
+  writeState_(state);
 }
 
 /* ============================ photos ============================ */

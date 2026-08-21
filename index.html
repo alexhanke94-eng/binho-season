@@ -156,6 +156,34 @@
   .log-restore{color:var(--home);font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--line);border-radius:999px}
   .empty{font-family:var(--mono);font-size:.72rem;color:var(--dim);line-height:1.7;padding:16px 0}
 
+  /* tournaments */
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:7px 12px;margin:0 6px 6px 0;
+    font-family:var(--mono);font-size:.66rem;letter-spacing:.04em;color:var(--dim);background:rgba(0,0,0,.15);cursor:pointer}
+  .chip.on{color:var(--turf);background:var(--chalk);border-color:var(--chalk);font-weight:600}
+  .cup-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-family:var(--mono);font-size:.74rem}
+  .cup-row .nm{font-family:var(--body);font-size:.88rem}
+  .cup-row .sub2{font-size:.56rem;letter-spacing:.06em;color:var(--dim);margin-top:2px}
+  .cup-row button{border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-family:var(--mono);font-size:.62rem;color:var(--dim)}
+  .cup-play{color:var(--turf)!important;background:var(--chalk);border-color:var(--chalk)!important;font-weight:600;padding:7px 14px!important}
+  .cup-live{color:var(--yellow);font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase}
+  .queue-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin-bottom:8px;
+    border:1px solid var(--line);border-radius:12px;background:var(--turf-2)}
+  .bracket-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  .bracket{display:flex;gap:14px;min-width:min-content}
+  .br-round{display:flex;flex-direction:column;justify-content:space-around;gap:12px;min-width:150px}
+  .br-round h4{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 4px}
+  .br-match{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(0,0,0,.12)}
+  .br-slot{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;font-family:var(--body);font-size:.82rem}
+  .br-slot + .br-slot{border-top:1px solid var(--line)}
+  .br-slot .s{font-family:var(--mono);font-size:.74rem;color:var(--dim)}
+  .br-slot.win{color:var(--home);font-weight:600}
+  .br-slot.win .s{color:var(--home)}
+  .br-slot.bye{color:var(--dim);font-style:italic}
+  .br-tag{font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);padding:2px 10px 6px}
+  .champ{border:1px solid var(--gold);border-radius:12px;padding:14px;margin:6px 0 4px;text-align:center;background:rgba(214,178,74,.08)}
+  .champ .who{font-family:var(--display);font-weight:800;font-size:1.4rem;letter-spacing:.06em;color:var(--gold)}
+  .champ .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+
   /* tab bar */
   nav{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--turf-2)}
   nav button{padding:13px 2px calc(13px + env(safe-area-inset-bottom));font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
@@ -367,6 +395,7 @@
         </div>
         <button class="btn btn--go" id="startBtn" style="margin-top:20px">Start match</button>
         <button class="btn" id="manualBtn" style="margin-top:10px">Log a finished game</button>
+        <button class="btn" id="cupBtn" style="margin-top:10px">Run a tournament</button>
         <button class="btn btn--ghost" id="rulesBtn2" style="margin-top:10px">Binho rules</button>
         <div class="note" id="pregameNote"></div>
       </div>
@@ -488,6 +517,23 @@
       </div>
     </section>
 
+    <!-- CUP -->
+    <section class="view" id="v-cup">
+      <div class="pad">
+        <h2 id="cupName">The Binho Cup</h2>
+        <div class="sub" id="cupSub"></div>
+        <div id="cupChampion"></div>
+        <h3>Ready to play</h3>
+        <div id="cupQueue" class="empty">No matches are ready yet.</div>
+        <h3>Bracket</h3>
+        <div id="cupBracket" class="bracket-scroll"></div>
+        <div id="cupManager" style="display:none;margin-top:20px">
+          <button class="btn btn--danger" id="cupResetBtn">Reset this tournament</button>
+          <div class="note">Only a manager can reset a confirmed cup. This clears the bracket for everyone.</div>
+        </div>
+      </div>
+    </section>
+
     <!-- SETUP -->
     <section class="view" id="v-setup">
       <div class="pad">
@@ -562,8 +608,73 @@
     <button data-tab="standings">Table</button>
     <button data-tab="matchups">H2H</button>
     <button data-tab="log">Log</button>
+    <button data-tab="cup" id="cupTab" style="display:none">Cup</button>
     <button data-tab="setup">Setup</button>
   </nav>
+</div>
+
+<!-- tournament setup + draw review -->
+<div class="veil" id="cupSetupVeil">
+  <div class="sheet">
+    <div id="cupFormScreen">
+      <h2>Run a tournament</h2>
+      <div class="sub" style="margin-bottom:14px">Set it up, review the draw, then confirm. The bracket is shared — every phone plays from it.</div>
+
+      <div class="field"><label>Name</label><input type="text" id="cupNameInput" maxlength="40" autocomplete="off"></div>
+      <div class="row">
+        <div class="field"><label>Format</label><select id="cupFormat"><option value="single">Single elimination</option></select></div>
+        <div class="field"><label>Entry type</label><select id="cupEntryType">
+          <option value="singles">Singles</option>
+          <option value="duos">Duos</option>
+          <option value="teams">Teams</option>
+        </select></div>
+      </div>
+      <div class="field" id="cupTeamSizeRow" style="display:none"><label>Players per team</label><input type="number" id="cupTeamSize" min="2" max="8" value="3"></div>
+
+      <h3 id="cupEntrantsHead">Entrants</h3>
+      <div id="cupEntrantsUI"></div>
+
+      <h3>Match rules</h3>
+      <div class="row">
+        <div class="field"><label>Regulation minutes</label><input type="number" id="cupClock" min="0" max="30" value="5"></div>
+        <div class="field"><label>Boards (1–8)</label><input type="number" id="cupBoards" min="1" max="8" value="2"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Score limit</label><input type="number" id="cupLimit" min="0" max="20" value="7"></div>
+        <div class="field"><label>Sudden death at tie of</label><input type="number" id="cupSd" min="0" max="20" value="5"></div>
+      </div>
+      <div class="check"><input type="checkbox" id="cupPowerups"><label for="cupPowerups" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Power ups and event cards on</label></div>
+      <div class="check"><input type="checkbox" id="cupCountSeason"><label for="cupCountSeason" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Count toward season standings</label></div>
+      <div class="note" id="cupCountNote" style="display:none">Off for duos and teams — individual season records can't be derived from a team result.</div>
+
+      <div class="field" style="margin-top:12px"><label>Seeding</label><select id="cupSeeding">
+        <option value="random">Random</option>
+        <option value="standings">By season standings</option>
+        <option value="manual">Manual order</option>
+      </select></div>
+
+      <button class="btn btn--go" id="cupGenerateBtn" style="margin-top:14px">Generate draw</button>
+      <button class="btn btn--ghost" id="cupCancelBtn" style="margin-top:10px">Cancel</button>
+    </div>
+
+    <div id="cupReviewScreen" style="display:none">
+      <h2>Review the draw</h2>
+      <div class="sub" id="cupReviewSub" style="margin-bottom:14px"></div>
+      <div id="cupReviewBracket" class="bracket-scroll"></div>
+      <button class="btn btn--go" id="cupConfirmBtn" style="margin-top:14px">Confirm draw</button>
+      <button class="btn" id="cupRandomizeBtn" style="margin-top:10px">Randomize again</button>
+      <button class="btn btn--ghost" id="cupBackToFormBtn" style="margin-top:10px">Back to setup</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="cupRandomVeil">
+  <div class="sheet">
+    <h2>Randomize again?</h2>
+    <div class="sub" style="margin-bottom:14px">Are you sure? This discards the current draw and generates a fresh one.</div>
+    <button class="btn btn--danger" id="cupRandomConfirmBtn" style="margin-top:8px">Yes — discard and randomize</button>
+    <button class="btn btn--ghost" id="cupRandomCancelBtn" style="margin-top:10px">Keep this draw</button>
+  </div>
 </div>
 
 <!-- record result -->
@@ -756,7 +867,7 @@
   }
 
   /* ---------------- backend ---------------- */
-  function blank(){ return { players:[], members:[], matches:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:''} }; }
+  function blank(){ return { players:[], members:[], matches:[], tournaments:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:''} }; }
 
   var API = (window.BINHO_CONFIG && window.BINHO_CONFIG.apiUrl) || '';
 
@@ -833,6 +944,10 @@
         case 'wipe':        return 'erasing the league';
         case 'photo':       return (p.name ? p.name + '’s photo' : 'a photo');
         case 'passcode':    return 'the passcode change';
+        case 'createTournament': return 'the tournament';
+        case 'updateTournament': return 'the cup result';
+        case 'claimMatch':  return 'claiming that match';
+        case 'releaseMatch': return 'releasing that match';
         default:            return 'a change';
       }
     }
@@ -931,6 +1046,10 @@
       wipe: function(){ return write({ action: 'wipe' }); },
       setPasscode: function(which, code){ return write({ action: 'passcode', which: which, code: code }); },
       savePhoto: function(name, image){ return write({ action: 'photo', name: name, image: image }); },
+      createTournament: function(t){ return write({ action: 'createTournament', tournament: t }); },
+      updateTournament: function(id, op, payload){ return write({ action: 'updateTournament', id: id, op: op, payload: payload }); },
+      claimMatch: function(id, matchId, clientId){ return write({ action: 'claimMatch', id: id, matchId: matchId, clientId: clientId }); },
+      releaseMatch: function(id, matchId){ return write({ action: 'releaseMatch', id: id, matchId: matchId }); },
       login: async function(code){
         if(!API){ banner('No API URL set. Add your Apps Script /exec URL to config.js.'); return null; }
         try {
@@ -1322,6 +1441,7 @@
       belt: std ? false : $('selBelt').checked,
       limit: std ? 7 : league.cfg.scoreLimit,
       left: std ? 0 : league.cfg.clockMin * 60,
+      sdScore: league.cfg.sdScore,
       running:false, sd:false, over:false, htH:0, htA:0
     };
     undoStack = [];
@@ -1352,7 +1472,10 @@
   // shared ending predicates so live play, the clock running out, and confirming a
   // last-second play all judge the outcome by the exact same rules
   function reachedLimit(){ return game.limit > 0 && (game.sh >= game.limit || game.sa >= game.limit); }
-  function tieAtSdMark(){ return !game.std && game.sh === game.sa && game.sh >= league.cfg.sdScore; }
+  function tieAtSdMark(){
+    var sd = game.sdScore != null ? game.sdScore : league.cfg.sdScore;   // tournament games carry their own mark
+    return !game.std && game.sh === game.sa && game.sh >= sd;
+  }
 
   // Decide and act on the ending once the clock is spent (clock ran out, or a last-second
   // play is confirmed). Reuses endGame / enterSuddenDeath so the rules cannot drift.
@@ -1546,6 +1669,7 @@
     $('recOfficialRow').style.display = game.std ? 'none' : 'flex';
     $('recStdNote').style.display = game.std ? 'block' : 'none';
     $('recOfficial').checked = true;
+    decorateRecordModal();   // cup matches show "advances" and hide the league-only bits
     $('recVeil').classList.add('open');
     renderLive();
   }
@@ -1613,6 +1737,379 @@
 
   // recorded matches already reach the sheet through the API
   function pushToSheet(){}
+
+  /* ==================== tournaments — The Binho Cup ==================== */
+  var cupEntrants = [], cupTeamMembers = [], cupTeamNameVal = '', cupDraft = null;
+
+  function clientId(){
+    var k = 'binho_cid', v = localStorage.getItem(k);
+    if(!v){ v = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); try { localStorage.setItem(k, v); } catch(e){} }
+    return v;
+  }
+  function activeCup(){ var ts = league.tournaments || []; return ts.length ? ts[ts.length - 1] : null; }
+  function cupById(id){ return (league.tournaments || []).filter(function(t){ return t.id === id; })[0] || null; }
+  function claimLive(m){ return !!(m.claim && (Date.now() - m.claim.at) < 45*60*1000); }
+  function findMatch(t, id){ var out=null; t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.id===id) out=m; }); }); return out; }
+
+  function gotoView(name){
+    document.querySelectorAll('nav button').forEach(function(x){ x.classList.remove('on'); });
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
+    var btn = document.querySelector('nav button[data-tab="' + name + '"]');
+    if(btn) btn.classList.add('on');
+    var view = $('v-' + name); if(view) view.classList.add('on');
+  }
+  function showCupTab(show){ if(show === undefined) show = !!activeCup(); $('cupTab').style.display = show ? 'block' : 'none'; }
+
+  /* ---- bracket construction (single elimination; structure leaves room for double later) ---- */
+  function nextPow2(n){ var p = 1; while(p < n) p *= 2; return p; }
+  function seedOrder(P){
+    var order = [1];
+    while(order.length < P){
+      var sum = order.length * 2 + 1, next = [];
+      for(var i = 0; i < order.length; i++){ next.push(order[i]); next.push(sum - order[i]); }
+      order = next;
+    }
+    return order;
+  }
+  // Standard bracket puts the lowest seed first in each pair, so byes (missing high seeds)
+  // always land on the top seeds — exactly what we want when seeded, and random when the
+  // seed order itself is random.
+  function buildBracket(tid, entrants){
+    var N = entrants.length, P = nextPow2(N), order = seedOrder(P), rounds = [], r1 = [];
+    for(var i = 0; i < P / 2; i++){
+      var sa = order[2*i], sb = order[2*i+1];
+      var a = sa <= N ? entrants[sa-1].name : null;
+      var b = sb <= N ? entrants[sb-1].name : null;
+      var m = { id: tid + '-0-' + i, round:0, index:i, a:a, b:b, winner:null, sh:null, sa:null, played:false, bye:false, claim:null };
+      if(a && !b){ m.winner = a; m.played = true; m.bye = true; }
+      else if(b && !a){ m.winner = b; m.played = true; m.bye = true; }
+      r1.push(m);
+    }
+    rounds.push(r1);
+    var count = P / 2, round = 1;
+    while(count > 1){
+      count = count / 2;
+      var rr = [];
+      for(var j = 0; j < count; j++) rr.push({ id: tid + '-' + round + '-' + j, round:round, index:j, a:null, b:null, winner:null, sh:null, sa:null, played:false, bye:false, claim:null });
+      rounds.push(rr); round++;
+    }
+    cupFeedForward({ rounds: rounds });   // propagate the round-1 byes into round 2
+    return rounds;
+  }
+  function cupFeedForward(t){
+    for(var r = 0; r < t.rounds.length - 1; r++){
+      t.rounds[r].forEach(function(m){
+        if(m.winner){
+          var nm = t.rounds[r+1][Math.floor(m.index/2)];
+          if(m.index % 2 === 0) nm.a = m.winner; else nm.b = m.winner;
+        }
+      });
+    }
+  }
+  // optimistic local advance — the server does the authoritative version identically
+  function cupApplyResult(t, matchId, sh, sa, winner){
+    var m = findMatch(t, matchId);
+    if(!m || m.played) return;
+    m.sh = sh; m.sa = sa; m.winner = winner; m.played = true; m.claim = null;
+    cupFeedForward(t);
+    var last = t.rounds[t.rounds.length-1][0];
+    if(last && last.played && last.winner){ t.status = 'done'; t.champion = last.winner; t.closed = Date.now(); }
+  }
+  function cupReadyMatches(t){
+    var out = [];
+    t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.a && m.b && !m.played && !m.bye) out.push(m); }); });
+    return out;
+  }
+  function roundLabel(t, r){ var rem = t.rounds.length - r; return rem===1?'Final':rem===2?'Semifinal':rem===3?'Quarterfinal':('Round ' + (r+1)); }
+  function entryLabel(t){ return t.entryType==='singles'?'singles':t.entryType==='duos'?'duos':('teams of ' + t.teamSize); }
+
+  /* ---- standings-based seeding, reusing the league table logic ---- */
+  function leaguePointsMap(){
+    var lm = leagueMatches(), map = {};
+    (league.players || []).forEach(function(p){ map[p] = statsFor(p, lm).pts; });
+    return map;
+  }
+  function entrantPoints(e, map){ return (e.members || [e.name]).reduce(function(s, n){ return s + (map[n] || 0); }, 0); }
+  function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
+  function seedEntrants(list, seeding){
+    if(seeding === 'random') return shuffle(list.slice());
+    if(seeding === 'manual') return list.slice();
+    var map = leaguePointsMap();
+    return list.slice().sort(function(a, b){ return entrantPoints(b, map) - entrantPoints(a, map); });   // most points seeded first
+  }
+
+  /* ---- bracket rendering (shared by draw review and the Cup view) ---- */
+  function slotHTML(name, score, isWin, isBye){
+    return '<div class="br-slot' + (isWin?' win':'') + (isBye?' bye':'') + '">' +
+      '<span>' + esc(name || (isBye ? 'bye' : '—')) + '</span>' +
+      '<span class="s">' + (score==null?'':score) + '</span></div>';
+  }
+  function matchHTML(t, m){
+    if(m.bye){ var adv = m.a || m.b; return '<div class="br-match">' + slotHTML(adv, '', true, false) + slotHTML('bye', '', false, true) + '<div class="br-tag">bye</div></div>'; }
+    var aWin = m.played && m.winner === m.a, bWin = m.played && m.winner === m.b;
+    var tag = claimLive(m) ? '<div class="br-tag">On board ' + m.claim.board + '</div>' : '';
+    return '<div class="br-match">' + slotHTML(m.a, m.sh, aWin, false) + slotHTML(m.b, m.sa, bWin, false) + tag + '</div>';
+  }
+  function bracketHTML(t){
+    return '<div class="bracket">' + t.rounds.map(function(rd, r){
+      return '<div class="br-round"><h4>' + roundLabel(t, r) + '</h4>' + rd.map(function(m){ return matchHTML(t, m); }).join('') + '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* ---- setup form ---- */
+  function openCupSetup(){
+    if(!requireManage()) return;
+    if(activeCup()){ toast('A tournament is already running — reset it first'); gotoView('cup'); return; }
+    cupEntrants = []; cupTeamMembers = []; cupDraft = null;
+    $('cupNameInput').value = 'Binho Cup — ' + new Date().toLocaleString(undefined, {month:'long'});
+    $('cupEntryType').value = 'singles';
+    $('cupTeamSize').value = 3;
+    $('cupClock').value = league.cfg.clockMin; $('cupBoards').value = 2;
+    $('cupLimit').value = league.cfg.scoreLimit; $('cupSd').value = league.cfg.sdScore;
+    $('cupPowerups').checked = false; $('cupCountSeason').checked = false; $('cupSeeding').value = 'random';
+    $('cupFormScreen').style.display = 'block'; $('cupReviewScreen').style.display = 'none';
+    cupEntryChanged();
+    $('cupSetupVeil').classList.add('open');
+  }
+  function cupEntryChanged(){
+    var type = $('cupEntryType').value, team = type !== 'singles';
+    $('cupTeamSizeRow').style.display = type === 'teams' ? 'block' : 'none';
+    if(team){ $('cupCountSeason').checked = false; $('cupCountSeason').disabled = true; $('cupCountNote').style.display = 'block'; }
+    else { $('cupCountSeason').disabled = false; $('cupCountNote').style.display = 'none'; }
+    $('cupEntrantsHead').textContent = team ? 'Teams' : 'Entrants';
+    cupEntrants = []; cupTeamMembers = []; cupTeamNameVal = '';
+    renderEntrantsUI();
+  }
+  function teamSize(){ var type = $('cupEntryType').value; return type==='duos' ? 2 : Math.max(2, parseInt($('cupTeamSize').value,10)||3); }
+  function renderEntrantsUI(){
+    var type = $('cupEntryType').value, roster = league.players || [], html = '';
+    if(type === 'singles'){
+      var chosen = {}; cupEntrants.forEach(function(e){ chosen[e.name] = 1; });
+      html += '<div class="note" style="margin-bottom:8px">Tap roster players to enter them, or type a name.</div>';
+      html += '<div>' + roster.map(function(p){ return '<span class="chip' + (chosen[p]?' on':'') + '" data-toggle="' + esc(p) + '">' + esc(p) + '</span>'; }).join('') + '</div>';
+      html += '<div class="row" style="margin-top:6px"><input type="text" id="cupTypeName" placeholder="Add a name" maxlength="24" autocomplete="off"><button class="btn" id="cupAddNameBtn" style="flex:0 0 auto;width:auto;padding:12px 16px">Add</button></div>';
+    } else {
+      var size = teamSize();
+      var inTeam = {}; cupTeamMembers.forEach(function(n){ inTeam[n]=1; });
+      var used = {}; cupEntrants.forEach(function(e){ (e.members||[]).forEach(function(n){ used[n]=1; }); });
+      html += '<div class="note" style="margin-bottom:8px">Name a team, add its players, then Add team.</div>';
+      html += '<div class="field"><input type="text" id="cupTeamName" placeholder="Team name" maxlength="24" autocomplete="off" value="' + esc(cupTeamNameVal) + '"></div>';
+      html += '<div>' + roster.map(function(p){ var dis = used[p] && !inTeam[p]; return '<span class="chip' + (inTeam[p]?' on':'') + '" data-member="' + esc(p) + '"' + (dis?' style="opacity:.3;pointer-events:none"':'') + '>' + esc(p) + '</span>'; }).join('') + '</div>';
+      html += '<div class="row" style="margin-top:6px"><input type="text" id="cupTypeMember" placeholder="Add a player" maxlength="24" autocomplete="off"><button class="btn" id="cupAddMemberBtn" style="flex:0 0 auto;width:auto;padding:12px 16px">Add</button></div>';
+      if(cupTeamMembers.length) html += '<div style="margin-top:6px">' + cupTeamMembers.map(function(n){ return '<span class="chip on" data-unmember="' + esc(n) + '">' + esc(n) + ' ×</span>'; }).join('') + '</div>';
+      html += '<button class="btn" id="cupAddTeamBtn" style="margin-top:8px">Add team (' + cupTeamMembers.length + '/' + size + ')</button>';
+    }
+    if(cupEntrants.length){
+      html += '<div style="margin-top:12px">' + cupEntrants.map(function(e, i){
+        var sub = (type !== 'singles') ? '<div class="sub2">' + esc((e.members||[]).join(', ')) + '</div>' : '';
+        return '<div class="cup-row"><div><span class="s">' + (i+1) + '.</span> <span class="nm">' + esc(e.name) + '</span>' + sub + '</div>' +
+          '<div style="display:flex;gap:6px"><button data-up="' + i + '">↑</button><button data-down="' + i + '">↓</button><button data-rm="' + i + '">×</button></div></div>';
+      }).join('') + '</div>';
+    }
+    $('cupEntrantsUI').innerHTML = html;
+  }
+  function toggleSingle(name){
+    var i = cupEntrants.map(function(e){ return e.name; }).indexOf(name);
+    if(i > -1) cupEntrants.splice(i, 1); else cupEntrants.push({ name:name, members:[name] });
+    renderEntrantsUI();
+  }
+  function addSingle(name){
+    if(cupEntrants.some(function(e){ return e.name.toLowerCase() === name.toLowerCase(); })){ toast('Already entered'); return; }
+    cupEntrants.push({ name:name, members:[name] }); renderEntrantsUI();
+  }
+  function addTeamMember(name){
+    if(cupTeamMembers.indexOf(name) > -1){ return; }
+    if(cupEntrants.some(function(e){ return (e.members||[]).indexOf(name) > -1; })){ toast(name + ' is already on a team'); return; }
+    cupTeamMembers.push(name); renderEntrantsUI();
+  }
+  function removeTeamMember(name){ var i = cupTeamMembers.indexOf(name); if(i > -1) cupTeamMembers.splice(i, 1); renderEntrantsUI(); }
+  function addTeam(){
+    var size = teamSize(), nm = (cupTeamNameVal || '').trim();
+    if(!nm){ toast('Name the team'); return; }
+    if(cupEntrants.some(function(e){ return e.name.toLowerCase() === nm.toLowerCase(); })){ toast('That team name is taken'); return; }
+    if(cupTeamMembers.length !== size){ toast('Teams need exactly ' + size + ' players'); return; }
+    cupEntrants.push({ name:nm, members:cupTeamMembers.slice() });
+    cupTeamMembers = []; cupTeamNameVal = ''; renderEntrantsUI();
+  }
+  function moveEntrant(i, dir){ var j = i + dir; if(j < 0 || j >= cupEntrants.length) return; var t = cupEntrants[i]; cupEntrants[i] = cupEntrants[j]; cupEntrants[j] = t; renderEntrantsUI(); }
+
+  function cupGenerate(){
+    var type = $('cupEntryType').value;
+    if(cupEntrants.length < 2){ toast('Need at least two entrants'); return; }
+    var seeded = seedEntrants(cupEntrants, $('cupSeeding').value);
+    var tid = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    cupDraft = {
+      id: tid,
+      name: ($('cupNameInput').value || '').trim() || 'Binho Cup',
+      format: $('cupFormat').value,
+      entryType: type,
+      teamSize: type==='teams' ? teamSize() : (type==='duos' ? 2 : 1),
+      boards: Math.max(1, Math.min(8, parseInt($('cupBoards').value,10) || 1)),
+      rules: {
+        clockMin: Math.max(0, parseInt($('cupClock').value,10) || 0),
+        scoreLimit: Math.max(0, parseInt($('cupLimit').value,10) || 7),
+        sdScore: Math.max(0, parseInt($('cupSd').value,10) || 5),
+        powerups: $('cupPowerups').checked
+      },
+      countSeason: type === 'singles' && $('cupCountSeason').checked,
+      seeding: $('cupSeeding').value,
+      status: 'active',
+      entrants: seeded,
+      rounds: buildBracket(tid, seeded),
+      champion: null,
+      created: Date.now()
+    };
+    renderReview();
+    $('cupFormScreen').style.display = 'none'; $('cupReviewScreen').style.display = 'block';
+  }
+  function renderReview(){
+    var t = cupDraft, N = t.entrants.length, byes = (t.rounds[0].length * 2) - N;
+    $('cupReviewSub').textContent = t.name + ' · ' + N + ' entrants' + (byes ? ' · ' + byes + ' bye' + (byes>1?'s':'') : '') + ' · ' + t.boards + ' board' + (t.boards>1?'s':'');
+    $('cupReviewBracket').innerHTML = bracketHTML(t);
+  }
+  async function cupConfirm(){
+    var t = cupDraft; if(!t) return;
+    league.tournaments = (league.tournaments || []).concat([t]);   // optimistic
+    $('cupSetupVeil').classList.remove('open');
+    renderCup(); gotoView('cup');
+    var r = await Api.createTournament(t);
+    if(r && r.state){ applyState(r.state); renderAll(); }
+    else if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } }
+    else if(r && (r.queued || r.offline)) toast('Draw saved — will sync when reconnected');
+  }
+
+  /* ---- Cup view ---- */
+  function renderCup(){
+    var t = activeCup();
+    showCupTab(!!t);
+    if(!t){ if($('v-cup').classList.contains('on')) gotoView('board'); return; }
+    var done = t.status === 'done';
+    $('cupName').textContent = t.name;
+    $('cupSub').textContent = (t.entrants||[]).length + ' entrants · ' + entryLabel(t) + ' · ' + t.boards + ' board' + (t.boards>1?'s':'') + (done ? ' · complete' : '');
+    $('cupChampion').innerHTML = done && t.champion ? '<div class="champ"><div class="lbl">Champion</div><div class="who">' + esc(t.champion) + '</div></div>' : '';
+    renderCupQueue(t);
+    $('cupBracket').innerHTML = bracketHTML(t);
+    $('cupManager').style.display = canManage() ? 'block' : 'none';
+  }
+  function renderCupQueue(t){
+    var el = $('cupQueue');
+    if(t.status === 'done'){ el.className = 'empty'; el.innerHTML = 'This cup is complete.'; return; }
+    var ready = cupReadyMatches(t);
+    if(!ready.length){ el.className = 'empty'; el.innerHTML = 'No matches are ready yet — winners feed the next round.'; return; }
+    el.className = '';
+    var used = {}; ready.forEach(function(m){ if(claimLive(m)) used[m.claim.board] = 1; });
+    var free = []; for(var b = 1; b <= t.boards; b++){ if(!used[b]) free.push(b); }
+    var fi = 0;
+    el.innerHTML = ready.map(function(m){
+      var right;
+      if(claimLive(m)){
+        right = '<span class="cup-live">In progress · Board ' + m.claim.board + '</span>' +
+          (canManage() ? ' <button data-release="' + m.id + '">Release</button>' : '');
+      } else if(fi < free.length){
+        right = '<button class="cup-play" data-play="' + m.id + '">Play · Board ' + free[fi++] + '</button>';
+      } else {
+        right = '<span class="cup-live" style="color:var(--dim)">Waiting for a board</span>';
+      }
+      return '<div class="queue-item"><div><div class="nm">' + esc(m.a) + ' vs ' + esc(m.b) + '</div>' +
+        '<div class="sub2">' + roundLabel(t, m.round) + '</div></div><div style="white-space:nowrap">' + right + '</div></div>';
+    }).join('');
+  }
+
+  /* ---- playing a cup match on the shared live board ---- */
+  async function cupPlay(matchId){
+    var t = activeCup(); if(!t) return;
+    var m = findMatch(t, matchId);
+    if(!m || !m.a || !m.b || m.played){ toast('That match is not playable'); return; }
+    if(claimLive(m) && m.claim.by !== clientId()){ toast('Already claimed on board ' + m.claim.board); return; }
+    var r = await Api.claimMatch(t.id, matchId, clientId());
+    if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } return; }
+    if(r && (r.queued || r.offline)){ toast('Reconnect to claim a match'); return; }   // claiming must be atomic on the server
+    if(r && r.state){ applyState(r.state); renderAll(); }
+    var board = (r && r.data && r.data.board) || 1;
+    startTournamentMatch(t.id, matchId, board);
+  }
+  function startTournamentMatch(tid, matchId, board){
+    var t = cupById(tid); if(!t){ toast('That tournament is gone'); return; }
+    var m = findMatch(t, matchId); if(!m || !m.a || !m.b){ toast('That match is no longer available'); return; }
+    game = {
+      home:m.a, away:m.b, sh:0, sa:0,
+      yH:0,yA:0,rH:0,rA:0,tH:0,tA:0, syH:0,syA:0,pyH:0,pyA:0, ogH:0,ogA:0, sdMin:0,
+      std:false, puH:'', puA:'', ecH:'', ecA:'',
+      mode: t.name, belt:false,
+      limit: t.rules.scoreLimit, left: t.rules.clockMin * 60, sdScore: t.rules.sdScore,
+      running:false, sd:false, over:false, htH:0, htA:0,
+      tourney: { id: t.id, matchId: matchId, cup: t.name, board: board, countSeason: t.countSeason && t.entryType === 'singles' }
+    };
+    undoStack = [];
+    gotoView('board');
+    $('pregame').style.display = 'none'; $('live').style.display = 'grid';
+    $('liveHome').textContent = m.a; $('liveAway').textContent = m.b;
+    $('avLiveHome').innerHTML = avatarHTML(m.a, 'avatar--lg');
+    $('avLiveAway').innerHTML = avatarHTML(m.b, 'avatar--lg');
+    renderLive();
+    countdown(function(){
+      if(game && !game.running && game.left > 0){ game.running = true; timer = setInterval(tick, 1000); }
+      renderLive();
+    });
+  }
+  function saveTournamentResult(){
+    var g = game; if(!g || !g.tourney) return;
+    if(g.sh === g.sa){ toast('A cup match needs a winner — play on'); return; }
+    var winner = g.sh > g.sa ? g.home : g.away;
+    var rec = recordFromGame(g);
+    rec.tournament = g.tourney.cup; rec.mode = g.tourney.cup; rec.belt = false;
+    rec.official = !!g.tourney.countSeason;   // counts only when the cup opted in AND it is singles
+    var tid = g.tourney.id, payload = { matchId: g.tourney.matchId, sh: g.sh, sa: g.sa, winner: winner };
+    // optimistic: log the game and advance the local bracket
+    league.matches.unshift(rec);
+    var lt = cupById(tid); if(lt) cupApplyResult(lt, g.tourney.matchId, g.sh, g.sa, winner);
+    game = null;
+    $('recVeil').classList.remove('open'); $('live').style.display = 'none'; $('pregame').style.display = 'block';
+    renderAll(); gotoView('cup');
+    toast(winner + ' advances');
+    // send both writes and apply only the final state to avoid a mid-flight flicker
+    (async function(){
+      var r1 = await Api.recordMatch(rec);
+      var r2 = await Api.updateTournament(tid, 'result', payload);
+      if(r2 && r2.state){ applyState(r2.state); renderAll(); }
+      else if(r1 && r1.state){ applyState(r1.state); renderAll(); }
+      if((r1 && r1.refused) || (r2 && r2.refused)){
+        toast((r2 && r2.error) || (r1 && r1.error) || 'The cup result was refused');
+        var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); }
+      }
+    })();
+  }
+  async function cupRelease(matchId){
+    if(!requireManage()) return;
+    var t = activeCup(); if(!t) return;
+    var r = await Api.releaseMatch(t.id, matchId);
+    if(r && r.state){ applyState(r.state); renderAll(); }
+    else if(r && r.refused){ toast(r.error); }
+  }
+  async function cupReset(){
+    if(!requireManage()) return;
+    var t = activeCup(); if(!t) return;
+    if(!confirm('Reset “' + t.name + '”? This clears the bracket for everyone.')) return;
+    var id = t.id;
+    league.tournaments = (league.tournaments || []).filter(function(x){ return x.id !== id; });
+    renderCup(); if(!activeCup()) gotoView('board');
+    var r = await Api.updateTournament(id, 'reset');
+    if(r && r.state){ applyState(r.state); renderAll(); }
+    else if(r && r.refused){ toast(r.error); var fresh = await Api.getState(); if(fresh){ applyState(fresh); renderAll(); } }
+  }
+  // shown on the record modal at full time; overrides the league-flavoured bits for a cup match
+  function decorateRecordModal(){
+    var tour = !!(game && game.tourney);
+    $('recDiscardBtn').style.display = tour ? 'none' : 'block';
+    $('recSaveBtn').textContent = tour ? 'Record result' : 'Record match';
+    if(tour){
+      var win = game.sh > game.sa ? game.home : (game.sa > game.sh ? game.away : null);
+      $('recWho').textContent = win ? (win + ' advances') : 'Level — play on';
+      $('recTags').textContent = game.tourney.cup + (game.sd ? ' · Sudden death' : '');
+      $('recOfficialRow').style.display = 'none';
+      $('recStdNote').style.display = 'none';
+    }
+  }
 
   /* ---------------- manual entry ---------------- */
   var manualEditId = null, manualEditMatch = null;   // set while editing an existing match
@@ -2130,10 +2627,11 @@
   function logTags(m){
     var tags = [];
     if(isStandard(m)) tags.push('Standard Binho');
+    else if(m.tournament) tags.push(m.tournament);   // a cup match is tagged with the cup, not "For fun"
     else if(!m.official) tags.push('For fun');
     if(m.sd) tags.push('Sudden death');
     if(m.belt) tags.push('Belt');
-    if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho') tags.push(m.mode);
+    if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho' && m.mode !== m.tournament) tags.push(m.mode);
     if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
     if((m.tH||0)+(m.tA||0)) tags.push('Technical');
     if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
@@ -2182,7 +2680,7 @@
     }
 
     // export mirrors the Log sheet exactly — discarded games live in their own sheet, so they are left out
-    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited'];
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited','Tournament'];
     var rows = active.map(function(m){
       var win = m.sh > m.sa ? m.home : m.away;
       var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
@@ -2192,7 +2690,7 @@
         m.yH||0, m.rH||0, m.syH||0, m.tH||0, m.ogH||0, (m.rH||0) + (isStandard(m) ? 0 : (m.ogH||0)),
         m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
         m.htH||0, m.htA||0,
-        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':''].join('\t');
+        m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':'', m.tournament||''].join('\t');
     });
     $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
   }
@@ -2230,7 +2728,7 @@
     $('cfgVoice').checked = !!league.cfg.voice;
   }
 
-  function renderAll(){ renderPlayers(); renderStandings(); renderSelections(); renderMatchups(); renderLog(); renderSeasons(); renderBelt(); renderCfg(); }
+  function renderAll(){ renderPlayers(); renderStandings(); renderSelections(); renderMatchups(); renderLog(); renderSeasons(); renderBelt(); renderCfg(); renderCup(); }
 
   /* ---------------- wiring ---------------- */
   document.querySelectorAll('nav button').forEach(function(b){
@@ -2248,6 +2746,39 @@
 
   $('startBtn').addEventListener('click', startMatch);
   $('manualBtn').addEventListener('click', openManual);
+
+  /* ---- tournament wiring ---- */
+  $('cupBtn').addEventListener('click', openCupSetup);
+  $('cupEntryType').addEventListener('change', cupEntryChanged);
+  $('cupTeamSize').addEventListener('input', function(){ if($('cupEntryType').value === 'teams') renderEntrantsUI(); });
+  $('cupEntrantsUI').addEventListener('input', function(e){ if(e.target.id === 'cupTeamName') cupTeamNameVal = e.target.value; });
+  $('cupEntrantsUI').addEventListener('click', function(e){
+    var b = e.target.closest('button, [data-toggle], [data-member], [data-unmember]'); if(!b) return;
+    if(b.dataset.toggle != null){ toggleSingle(b.dataset.toggle); return; }
+    if(b.id === 'cupAddNameBtn'){ var v = ($('cupTypeName').value || '').trim(); if(v) addSingle(v); return; }
+    if(b.dataset.member != null){ addTeamMember(b.dataset.member); return; }
+    if(b.id === 'cupAddMemberBtn'){ var v2 = ($('cupTypeMember').value || '').trim(); if(v2) addTeamMember(v2); return; }
+    if(b.dataset.unmember != null){ removeTeamMember(b.dataset.unmember); return; }
+    if(b.id === 'cupAddTeamBtn'){ addTeam(); return; }
+    if(b.dataset.up != null){ moveEntrant(+b.dataset.up, -1); return; }
+    if(b.dataset.down != null){ moveEntrant(+b.dataset.down, 1); return; }
+    if(b.dataset.rm != null){ cupEntrants.splice(+b.dataset.rm, 1); renderEntrantsUI(); return; }
+  });
+  $('cupGenerateBtn').addEventListener('click', cupGenerate);
+  $('cupCancelBtn').addEventListener('click', function(){ $('cupSetupVeil').classList.remove('open'); });
+  $('cupBackToFormBtn').addEventListener('click', function(){ $('cupReviewScreen').style.display = 'none'; $('cupFormScreen').style.display = 'block'; });
+  $('cupConfirmBtn').addEventListener('click', cupConfirm);
+  $('cupRandomizeBtn').addEventListener('click', function(){ $('cupRandomVeil').classList.add('open'); });
+  $('cupRandomCancelBtn').addEventListener('click', function(){ $('cupRandomVeil').classList.remove('open'); });
+  $('cupRandomConfirmBtn').addEventListener('click', function(){ $('cupRandomVeil').classList.remove('open'); cupGenerate(); });
+  $('cupQueue').addEventListener('click', function(e){
+    var b = e.target.closest('[data-play],[data-resume],[data-release]'); if(!b) return;
+    if(b.dataset.play != null) cupPlay(b.dataset.play);
+    else if(b.dataset.resume != null) cupPlay(b.dataset.resume);
+    else if(b.dataset.release != null) cupRelease(b.dataset.release);
+  });
+  $('cupResetBtn').addEventListener('click', cupReset);
+
   $('mType').addEventListener('change', manualType);
   $('mStdDecl').addEventListener('change', manualType);
   $('mHome').addEventListener('change', manualNames);
@@ -2293,7 +2824,7 @@
   $('endBtn').addEventListener('click', endGame);
   $('sdGoBtn').addEventListener('click', resumeSD);
 
-  $('recSaveBtn').addEventListener('click', saveMatch);
+  $('recSaveBtn').addEventListener('click', function(){ if(game && game.tourney) saveTournamentResult(); else saveMatch(); });
   $('recBackBtn').addEventListener('click', function(){
     $('recVeil').classList.remove('open');
     if(game){ game.over = false; renderLive(); }
@@ -2546,9 +3077,15 @@
   /* keep standings fresh without a reload — but never while a match is live, so an
      in-progress game is never overwritten. game != null means a match is on the board. */
   function refreshState(){
-    // never while a match is live, and never while our own writes are still in flight or
-    // queued — otherwise a poll could momentarily clobber an optimistic change
-    if(document.hidden || game || writesPending()) return;
+    if(document.hidden || writesPending()) return;   // don't clobber an optimistic write in flight
+    if(game){
+      // a match is live. Never touch the in-progress game — but if it's a cup match, still pull
+      // the bracket so watchers see other boards finish. Merge only tournaments, nothing else.
+      if(game.tourney){
+        Api.getState().then(function(s){ if(s){ league.tournaments = s.tournaments || []; renderCup(); } });
+      }
+      return;
+    }
     Api.getState().then(function(s){ if(s){ applyState(s); renderAll(); } });
   }
   setInterval(refreshState, 30000);
