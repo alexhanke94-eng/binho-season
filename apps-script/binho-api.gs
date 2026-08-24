@@ -106,9 +106,9 @@ function route_(body){
     case 'wipe':        return needs_(body.token, 'admin',   function(){ return wipe_(); });
     case 'passcode':    return needs_(body.token, 'admin',   function(){ return setPasscode_(body.which, body.code); });
     case 'createTournament': return needs_(body.token, 'manager', function(){ return createTournament_(body.tournament); });
-    case 'updateTournament': return body.op === 'result'
-      ? updateTournament_(body.id, 'result', body.payload, { code: body.code, token: body.token })   // guest, but must have joined
-      : needs_(body.token, 'manager', function(){ return updateTournament_(body.id, body.op, body.payload, { token: body.token }); }); // edit/void/reopen/reset/markPaid/regenCode
+    case 'updateTournament': return (body.op === 'result' || body.op === 'splitThird')
+      ? updateTournament_(body.id, body.op, body.payload, { code: body.code, token: body.token })   // guest, but must have joined
+      : needs_(body.token, 'manager', function(){ return updateTournament_(body.id, body.op, body.payload, { token: body.token }); }); // edit/void/reopen/reset/markPaid/regenCode/setThird
     case 'claimMatch':   return claimMatch_(body.id, body.matchId, body.clientId, { code: body.code, token: body.token });   // guest — under the lock, so atomic
     case 'releaseMatch': return needs_(body.token, 'manager', function(){ return releaseMatch_(body.id, body.matchId); });
     default:            return { ok:false, error:'Unknown action: ' + action };
@@ -547,11 +547,13 @@ function createTournament_(t){
   return { ok:true, state: readState_() };
 }
 
-// find a match anywhere in the bracket by its id
+// find a match anywhere in the bracket by its id — the third-place playoff included, so it is
+// claimed, played and reported through exactly the same code as any other cup match.
 function tMatch_(t, matchId){
   for(var r = 0; r < t.rounds.length; r++){
     for(var i = 0; i < t.rounds[r].length; i++){ if(t.rounds[r][i].id === matchId) return t.rounds[r][i]; }
   }
+  if(t.thirdPlace && !t.thirdPlace.split && t.thirdPlace.id === matchId) return t.thirdPlace;
   return null;
 }
 
@@ -569,8 +571,10 @@ function tFeedForward_(t){
   }
 }
 
-// the match a given match feeds into, or null if it is the final
+// the match a given match feeds into, or null if it is the final (or the third-place playoff,
+// whose winner advances nowhere)
 function tDownstream_(t, m){
+  if(m.thirdPlace) return null;
   if(m.round >= t.rounds.length - 1) return null;
   return t.rounds[m.round + 1][Math.floor(m.index / 2)];
 }
@@ -586,6 +590,46 @@ function recomputeChampion_(t){
   }
 }
 
+/* ---- third-place playoff ---- */
+// The two matches that feed the final. Their losers contest third place. Only meaningful with
+// four or more entrants (fewer means a bye sits in the semifinal round — no real third place).
+function tSemis_(t){
+  if((t.entrants || []).length < 4 || t.rounds.length < 2) return null;
+  var semis = t.rounds[t.rounds.length - 2];
+  return (semis && semis.length === 2) ? semis : null;
+}
+function tLoser_(m){ return m.winner === m.a ? m.b : m.a; }
+function tThirdPair_(tp){ return tp.split ? (tp.tied || []) : [tp.a, tp.b]; }
+function tSamePair_(p, q){ return p && q && ((p[0] === q[0] && p[1] === q[1]) || (p[0] === q[1] && p[1] === q[0])); }
+function tThirdResolved_(t){ return !!(t.thirdPlace && (t.thirdPlace.played || t.thirdPlace.split)); }
+function tIsSemi_(t, m){ var s = tSemis_(t); return !!(s && (s[0].id === m.id || s[1].id === m.id)); }
+// a played (non-split) third-place result has a Log row; drop it when the match is invalidated
+function tThirdDiscardLog_(t){
+  var tp = t.thirdPlace;
+  if(tp && tp.played && !tp.split && tp.a && tp.b) tMoveLogToDiscard_(t.name, tp.a, tp.b);
+}
+
+// Recompute the third-place playoff from the current semifinals — the same feed-from-source idea
+// as tFeedForward_. Creates the pending match when both semis are in (setting on) or a tied-third
+// split (setting off); keeps an already-resolved result while its two entrants still hold; and
+// clears it (discarding any Log row) the moment a semifinal changes or is reopened.
+function tThirdPlace_(t){
+  var semis = tSemis_(t);
+  var ready = semis && semis[0].played && !semis[0].bye && semis[0].winner &&
+                       semis[1].played && !semis[1].bye && semis[1].winner;
+  if(!ready){ if(t.thirdPlace){ tThirdDiscardLog_(t); t.thirdPlace = null; } return; }
+  var losers = [tLoser_(semis[0]), tLoser_(semis[1])];
+  var tp = t.thirdPlace;
+  if(tp && (tp.played || tp.split) && tSamePair_(tThirdPair_(tp), losers)) return;   // resolved, same pair — keep
+  if(tp && tp.played && !tSamePair_([tp.a, tp.b], losers)) tThirdDiscardLog_(t);      // stale played result — drop its row
+  if(t.thirdEnabled){
+    if(tp && !tp.played && !tp.split && tSamePair_([tp.a, tp.b], losers)){ tp.a = losers[0]; tp.b = losers[1]; return; }   // keep the pending match (and its claim)
+    t.thirdPlace = { id: t.id + '-3p', thirdPlace: true, a: losers[0], b: losers[1], winner: null, sh: null, sa: null, played: false, bye: false, claim: null, split: false };
+  } else {
+    t.thirdPlace = { thirdPlace: true, split: true, tied: losers };   // setting says skip → tied for third
+  }
+}
+
 // keep the Past-seasons archive entry in step with the tournament's state
 function syncTournamentArchive_(t){
   var state = readState_();
@@ -595,6 +639,7 @@ function syncTournamentArchive_(t){
   if(t.status === 'done' && t.champion){
     var games = 0;
     t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.played && !m.bye) games++; }); });
+    if(t.thirdPlace && t.thirdPlace.played) games++;
     var entry = { name: t.name, tournamentId: t.id, type: 'tournament', closed: t.closed || Date.now(),
       champion: t.champion, games: games, entrants: (t.entrants || []).length };
     if(idx >= 0) state.archives[idx] = entry; else state.archives.unshift(entry);
@@ -620,11 +665,9 @@ function tMoveLogToDiscard_(cup, a, b){
 // board number -> matchId, for claims that are live (not played, not expired)
 function tActiveClaims_(t){
   var now = Date.now(), used = {};
-  for(var r = 0; r < t.rounds.length; r++){
-    t.rounds[r].forEach(function(m){
-      if(m.claim && !m.played && (now - m.claim.at) < CLAIM_TTL_MS) used[m.claim.board] = m.id;
-    });
-  }
+  function note(m){ if(m && m.claim && !m.played && (now - m.claim.at) < CLAIM_TTL_MS) used[m.claim.board] = m.id; }
+  for(var r = 0; r < t.rounds.length; r++){ t.rounds[r].forEach(note); }
+  if(t.thirdPlace && !t.thirdPlace.split) note(t.thirdPlace);
   return used;
 }
 
@@ -684,7 +727,32 @@ function updateTournament_(id, op, payload, ctx){
   if(op === 'reopen')     return tReopen_(t, payload);
   if(op === 'markPaid')   return tMarkPaid_(t, payload, ctx);
   if(op === 'regenCode')  return tRegenCode_(t);
+  if(op === 'splitThird'){
+    if(!tournamentAuthed_(t, ctx)) return { ok:false, error:JOIN_REFUSAL };
+    return tSplitThird_(t);
+  }
+  if(op === 'setThird')   return tSetThird_(t, payload);
   return { ok:false, error:'Unknown tournament op: ' + op };
+}
+
+// Split third place: cancel the match, record both losers as tied for third. Open to either
+// entrant (no manager) — it is their money — but only before anyone has claimed or played it.
+function tSplitThird_(t){
+  var tp = t.thirdPlace;
+  if(!tp || tp.split) return { ok:false, error:'There is no third-place match to split' };
+  if(tp.played) return { ok:false, error:'That match has already been played' };
+  if(tp.claim && (Date.now() - tp.claim.at) < CLAIM_TTL_MS) return { ok:false, error:'That match is already under way' };
+  t.thirdPlace = { thirdPlace: true, split: true, tied: [tp.a, tp.b] };
+  return tFinish_(t);
+}
+
+// Manager toggle for the third-place setting. Turning it off skips the match (tied for third,
+// split payout); turning it back on regenerates a fresh playoff from the current semifinals.
+function tSetThird_(t, payload){
+  var on = !!(payload && payload.enabled);
+  t.thirdEnabled = on;
+  if(on && t.thirdPlace && t.thirdPlace.split) t.thirdPlace = null;   // add it back → recompute makes a pending match
+  return tFinish_(t);   // tThirdPlace_ turns a pending match into a split when off, or back into a match when on
 }
 
 // record that an entrant has (or hasn't) paid their buy-in. Manager-gated in the router.
@@ -708,6 +776,7 @@ function tRegenCode_(t){
 }
 
 function tFinish_(t){   // persist the tournament and its archive entry together
+  tThirdPlace_(t);       // keep the third-place playoff in step with the semifinals
   recomputeChampion_(t);
   writeTournament_(t);
   syncTournamentArchive_(t);
@@ -738,6 +807,7 @@ function tEdit_(t, payload){
   if(newWinner !== m.winner){
     var d = tDownstream_(t, m);
     if(d && d.played) return { ok:false, error:'A later round has already been played. Reopen it before changing this winner.' };
+    if(tIsSemi_(t, m) && tThirdResolved_(t)) return { ok:false, error:'The third-place match is already settled. Reopen it before changing this winner.' };
   }
   m.sh = sh; m.sa = sa; m.winner = newWinner; m.played = true;
   tFeedForward_(t);
@@ -754,6 +824,7 @@ function tVoid_(t, payload){
   if(!m.played) return { ok:false, error:'That match has not been played' };
   var d = tDownstream_(t, m);
   if(d && d.played) return { ok:false, error:'A later round has already been played. Reopen it before discarding this result.' };
+  if(tIsSemi_(t, m) && tThirdResolved_(t)) return { ok:false, error:'The third-place match is already settled. Reopen it before discarding this result.' };
   m.sh = null; m.sa = null; m.winner = null; m.played = false; m.claim = null;
   tFeedForward_(t);   // clears the slot this match fed
   if(payload.match){ removeRow_(getLogSheet_(), payload.match.id); putRow_(getDiscardSheet_(), payload.match.id, matchToRow_(payload.match)); }

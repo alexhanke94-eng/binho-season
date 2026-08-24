@@ -181,6 +181,8 @@
   .br-slot.bye{color:var(--dim);font-style:italic}
   .br-tag{font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);padding:2px 10px 6px}
   .br-reopen{color:var(--yellow);font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:none}
+  .br-3p{border-color:var(--gold)}
+  .br-round h4.h4-3p,.br-3p + .br-tag{color:var(--gold)}
   .champ{border:1px solid var(--gold);border-radius:12px;padding:14px;margin:6px 0 4px;text-align:center;background:rgba(214,178,74,.08)}
   .champ .who{font-family:var(--display);font-weight:800;font-size:1.4rem;letter-spacing:.06em;color:var(--gold)}
   .champ .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -564,6 +566,7 @@
           <div id="cupLedger"></div>
         </div>
         <div id="cupManager" style="display:none;margin-top:20px">
+          <button class="btn" id="cupThirdToggleBtn" style="display:none;margin-bottom:10px"></button>
           <button class="btn" id="cupRegenBtn">Reissue the join code</button>
           <button class="btn btn--danger" id="cupResetBtn" style="margin-top:10px">Reset this tournament</button>
           <div class="note">Only a manager can reissue a code or reset a confirmed cup. Reset clears the bracket for everyone.</div>
@@ -680,6 +683,11 @@
         <div class="field"><label>Score limit</label><input type="number" id="cupLimit" min="0" max="20" value="7"></div>
         <div class="field"><label>Sudden death at tie of</label><input type="number" id="cupSd" min="0" max="20" value="5"></div>
       </div>
+      <div class="field" style="margin-top:12px"><label>Third place match</label><select id="cupThirdSetting">
+        <option value="play">Play it</option>
+        <option value="skip">Skip it</option>
+      </select></div>
+      <div class="note">The two losing semifinalists play off for third place — needs four or more entrants. Defaults to on when the payout pays third; either entrant can agree to split it instead, and a manager can add or skip it on the day.</div>
       <div class="check"><input type="checkbox" id="cupPowerups"><label for="cupPowerups" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Power ups and event cards on</label></div>
       <div class="check"><input type="checkbox" id="cupCountSeason"><label for="cupCountSeason" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Count toward season standings</label></div>
       <div class="note" id="cupCountNote" style="display:none">Off for duos and teams — individual season records can't be derived from a team result.</div>
@@ -738,6 +746,19 @@
     <div class="field"><label>Join code</label><input type="text" id="joinCodeInput" maxlength="7" autocomplete="off" autocapitalize="characters" placeholder="e.g. K7P3M" style="text-transform:uppercase;font-family:var(--mono);letter-spacing:.2em;font-size:1.2rem;text-align:center"></div>
     <button class="btn btn--go" id="joinConfirmBtn" style="margin-top:8px">Join</button>
     <button class="btn btn--ghost" id="joinCancelBtn" style="margin-top:10px">Cancel</button>
+  </div>
+</div>
+
+<!-- split third place -->
+<div class="veil" id="splitVeil">
+  <div class="sheet">
+    <h2>Split third place</h2>
+    <div class="sub" id="splitSub" style="margin-bottom:12px"></div>
+    <div id="splitAmounts" class="cup-pot"></div>
+    <div class="check" style="margin-top:12px"><input type="checkbox" id="splitAgreeA"><label id="splitLblA" for="splitAgreeA" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)"></label></div>
+    <div class="check"><input type="checkbox" id="splitAgreeB"><label id="splitLblB" for="splitAgreeB" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)"></label></div>
+    <button class="btn btn--danger" id="splitConfirmBtn" style="margin-top:12px" disabled>Split and cancel the match</button>
+    <button class="btn btn--ghost" id="splitCancelBtn" style="margin-top:10px">Cancel</button>
   </div>
 </div>
 
@@ -1009,7 +1030,7 @@
         case 'photo':       return (p.name ? p.name + '’s photo' : 'a photo');
         case 'passcode':    return 'the passcode change';
         case 'createTournament': return 'the tournament';
-        case 'updateTournament': return p.op === 'editResult' ? 'the cup edit' : p.op === 'voidResult' ? 'discarding a cup result' : p.op === 'reopen' ? 'reopening a match' : p.op === 'reset' ? 'resetting the cup' : p.op === 'markPaid' ? 'the buy-in change' : p.op === 'regenCode' ? 'the new join code' : 'the cup result';
+        case 'updateTournament': return p.op === 'editResult' ? 'the cup edit' : p.op === 'voidResult' ? 'discarding a cup result' : p.op === 'reopen' ? 'reopening a match' : p.op === 'reset' ? 'resetting the cup' : p.op === 'markPaid' ? 'the buy-in change' : p.op === 'regenCode' ? 'the new join code' : p.op === 'splitThird' ? 'the third-place split' : p.op === 'setThird' ? 'the third-place setting' : 'the cup result';
         case 'claimMatch':  return 'claiming that match';
         case 'releaseMatch': return 'releasing that match';
         default:            return 'a change';
@@ -1848,7 +1869,7 @@
     return s;
   }
   function claimLive(m){ return !!(m.claim && (Date.now() - m.claim.at) < 45*60*1000); }
-  function findMatch(t, id){ var out=null; t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.id===id) out=m; }); }); return out; }
+  function findMatch(t, id){ var out=null; t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.id===id) out=m; }); }); if(!out && t.thirdPlace && !t.thirdPlace.split && t.thirdPlace.id===id) out=t.thirdPlace; return out; }
 
   function gotoView(name){
     document.querySelectorAll('nav button').forEach(function(x){ x.classList.remove('on'); });
@@ -1906,6 +1927,34 @@
       });
     }
   }
+  /* ---- third-place playoff (mirrors the server; the server is authoritative) ---- */
+  function cupSemis(t){
+    if((t.entrants || []).length < 4 || t.rounds.length < 2) return null;
+    var s = t.rounds[t.rounds.length - 2];
+    return (s && s.length === 2) ? s : null;
+  }
+  function cupLoser(m){ return m.winner === m.a ? m.b : m.a; }
+  function cupSeed(t, name){ var e = t.entrants || []; for(var i=0;i<e.length;i++){ if(e[i].name===name) return i; } return 999; }
+  function higherSeed(t, x, y){ return cupSeed(t, x) <= cupSeed(t, y) ? x : y; }
+  function cupThirdPair(tp){ return tp.split ? (tp.tied || []) : [tp.a, tp.b]; }
+  function samePair(p, q){ return p && q && ((p[0]===q[0] && p[1]===q[1]) || (p[0]===q[1] && p[1]===q[0])); }
+  function cupThirdResolved(t){ return !!(t.thirdPlace && (t.thirdPlace.played || t.thirdPlace.split)); }
+  function cupIsSemi(t, m){ var s = cupSemis(t); return !!(s && (s[0].id===m.id || s[1].id===m.id)); }
+  function cupThirdPlace(t){
+    var s = cupSemis(t);
+    var ready = s && s[0].played && !s[0].bye && s[0].winner && s[1].played && !s[1].bye && s[1].winner;
+    if(!ready){ t.thirdPlace = null; return; }
+    var losers = [cupLoser(s[0]), cupLoser(s[1])];
+    var tp = t.thirdPlace;
+    if(tp && (tp.played || tp.split) && samePair(cupThirdPair(tp), losers)) return;   // resolved, same pair — keep
+    if(t.thirdEnabled){
+      if(tp && !tp.played && !tp.split && samePair([tp.a, tp.b], losers)){ tp.a=losers[0]; tp.b=losers[1]; return; }
+      t.thirdPlace = { id: t.id + '-3p', thirdPlace:true, a:losers[0], b:losers[1], winner:null, sh:null, sa:null, played:false, bye:false, claim:null, split:false };
+    } else {
+      t.thirdPlace = { thirdPlace:true, split:true, tied:losers };
+    }
+  }
+
   function cupByName(name){ return (league.tournaments || []).filter(function(t){ return t.name === name; })[0] || null; }
   function bracketMatchFor(t, x, y){
     var out = null;
@@ -1919,12 +1968,14 @@
     if(!m || m.played) return;
     m.sh = sh; m.sa = sa; m.winner = winner; m.played = true; m.claim = null;
     cupFeedForward(t);
+    cupThirdPlace(t);   // both semis in → spin up (or resolve) the third-place playoff
     var last = t.rounds[t.rounds.length-1][0];
     if(last && last.played && last.winner){ t.status = 'done'; t.champion = last.winner; t.closed = Date.now(); }
   }
   function cupReadyMatches(t){
     var out = [];
     t.rounds.forEach(function(rd){ rd.forEach(function(m){ if(m.a && m.b && !m.played && !m.bye) out.push(m); }); });
+    if(t.thirdPlace && !t.thirdPlace.split && !t.thirdPlace.played && t.thirdPlace.a && t.thirdPlace.b) out.push(t.thirdPlace);
     return out;
   }
   function roundLabel(t, r){ var rem = t.rounds.length - r; return rem===1?'Final':rem===2?'Semifinal':rem===3?'Quarterfinal':('Round ' + (r+1)); }
@@ -1959,10 +2010,28 @@
     else if(m.played && canManage()) tag = '<div class="br-tag"><button class="br-reopen" data-reopen="' + m.id + '">Reopen</button></div>';
     return '<div class="br-match">' + slotHTML(m.a, m.sh, aWin, false) + slotHTML(m.b, m.sa, bWin, false) + tag + '</div>';
   }
+  // the third-place playoff shown as its own labelled match — never a round the winner leaves
+  function thirdPlaceHTML(t){
+    var tp = t.thirdPlace; if(!tp) return '';
+    var body;
+    if(tp.split){
+      var pair = tp.tied || [];
+      body = '<div class="br-match br-3p">' + slotHTML(pair[0], '', true, false) + slotHTML(pair[1], '', true, false) + '<div class="br-tag">tied — split</div></div>';
+    } else {
+      var aWin = tp.played && tp.winner === tp.a, bWin = tp.played && tp.winner === tp.b;
+      var tag;
+      if(claimLive(tp)) tag = '<div class="br-tag">On board ' + tp.claim.board + '</div>';
+      else if(tp.played && canManage()) tag = '<div class="br-tag"><button class="br-reopen" data-reopen="' + tp.id + '">Reopen</button></div>';
+      else if(tp.played) tag = '<div class="br-tag">3rd: ' + esc(tp.winner) + '</div>';
+      else tag = '<div class="br-tag">to play</div>';
+      body = '<div class="br-match br-3p">' + slotHTML(tp.a, tp.sh, aWin, false) + slotHTML(tp.b, tp.sa, bWin, false) + tag + '</div>';
+    }
+    return '<div class="br-round"><h4>Third place</h4>' + body + '</div>';
+  }
   function bracketHTML(t){
     return '<div class="bracket">' + t.rounds.map(function(rd, r){
       return '<div class="br-round"><h4>' + roundLabel(t, r) + '</h4>' + rd.map(function(m){ return matchHTML(t, m); }).join('') + '</div>';
-    }).join('') + '</div>';
+    }).join('') + thirdPlaceHTML(t) + '</div>';
   }
 
   /* ---- buy-in & payouts ---- */
@@ -2014,16 +2083,26 @@
     if(res.over) html += '<div class="pot-row pot-warn"><span>Over the pot by</span><span>$' + (res.total - res.pot) + '</span></div>';
     else if(res.leftover > 0) html += '<div class="pot-row pot-left"><span>Leftover, not paid out</span><span>$' + res.leftover + '</span></div>';
     $('cupPayoutSummary').innerHTML = html;
+    applyThirdDefault();   // the payout drives whether third place is played by default
     return res;
   }
   function renderMoneySetup(){
     var on = payoutBuyIn() > 0;
     $('cupMoneyBlock').style.display = on ? 'block' : 'none';
+    applyThirdDefault();
     if(!on) return;
     seedPayoutFromPreset();
     renderPayoutRows();
     renderPayoutSummary();
   }
+  // whether the current payout structure pays third place (drives the third-place setting default)
+  var cupThirdUserSet = false;
+  function payoutPaysThird(){
+    if(payoutBuyIn() <= 0) return false;
+    var p = payoutPlaces[2];
+    return !!(p && ((p.fixed != null && +p.fixed > 0) || (p.fixed == null && +p.pct > 0)));
+  }
+  function applyThirdDefault(){ if(!cupThirdUserSet) $('cupThirdSetting').value = payoutPaysThird() ? 'play' : 'skip'; }
 
   /* ---- finishing order, for completion payouts (single elimination) ---- */
   // champion first, then losers by the round they fell in (later round = better finish),
@@ -2046,6 +2125,40 @@
   function cupEntrantMembers(t, name){ var e = (t.entrants || []).filter(function(x){ return x.name === name; })[0]; return e && e.members ? e.members.slice() : []; }
   function shortWhen(ts){ try { return new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric' }); } catch(e){ return ''; } }
 
+  // Who is paid what and where they placed. Third and fourth follow the third-place playoff:
+  // played → winner takes third's payout, loser fourth; split/skipped → both tie for third and
+  // divide third + fourth, the remainder going to the higher seed. Deeper places stay seed-ranked.
+  function cupPayoutTable(t){
+    var amounts = (t.payout && t.payout.amounts) || [];
+    var pay = {}, placeOf = {};
+    if(!t.rounds || !t.rounds.length) return { pay:pay, placeOf:placeOf };
+    var finalM = t.rounds[t.rounds.length - 1][0];
+    if(!(finalM && finalM.played && finalM.winner)) return { pay:pay, placeOf:placeOf };   // shown once the final is in
+    function give(nm, amt){ if(nm && amt != null && amt > 0) pay[nm] = (pay[nm] || 0) + amt; }
+    var champ = finalM.winner, runner = cupLoser(finalM);
+    placeOf[champ] = '1st'; give(champ, amounts[0]);
+    if(runner){ placeOf[runner] = '2nd'; give(runner, amounts[1]); }
+    var a3 = +amounts[2] || 0, a4 = +amounts[3] || 0, tp = t.thirdPlace;
+    if(tp && tp.split){
+      var pair = tp.tied || [], hi = higherSeed(t, pair[0], pair[1]), lo = hi === pair[0] ? pair[1] : pair[0];
+      if(pair[0]) placeOf[pair[0]] = '3rd (tied)';
+      if(pair[1]) placeOf[pair[1]] = '3rd (tied)';
+      var each = Math.floor((a3 + a4) / 2), rem = (a3 + a4) - each * 2;
+      give(hi, each + rem); give(lo, each);
+    } else if(tp && tp.played && tp.winner){
+      var w = tp.winner, l = cupLoser(tp);
+      placeOf[w] = '3rd'; give(w, a3);
+      if(l){ placeOf[l] = '4th'; give(l, a4); }
+    } else if(tp){                                   // pending — not decided yet
+      if(tp.a) placeOf[tp.a] = '3rd/4th'; if(tp.b) placeOf[tp.b] = '3rd/4th';
+    }
+    // fifth place and beyond (larger brackets) keep the seed-ranked order
+    var ranked = tournamentPlacements(t);
+    for(var i = 4; i < ranked.length; i++){ placeOf[ranked[i]] = placeOf[ranked[i]] || ordinal(i + 1); give(ranked[i], amounts[i]); }
+    return { pay:pay, placeOf:placeOf };
+  }
+  function ordinal(n){ return ['1st','2nd','3rd','4th','5th','6th','7th','8th'][n-1] || (n + 'th'); }
+
   /* ---- Cup tab: picker, join code, ledger ---- */
   function renderCupPicker(vis, current){
     var el = $('cupPicker');
@@ -2067,20 +2180,19 @@
     if(!(t.buyIn > 0)){ sec.style.display = 'none'; return; }
     sec.style.display = 'block';
     var entrants = t.entrants || [], ledger = t.ledger || {};
-    var amounts = (t.payout && t.payout.amounts) || [];
-    var placements = t.status === 'done' ? tournamentPlacements(t) : [];
-    var payFor = {}; placements.forEach(function(nm, i){ if(amounts[i] != null && amounts[i] > 0) payFor[nm] = amounts[i]; });
+    var table = cupPayoutTable(t), payFor = table.pay, placeOf = table.placeOf;
     var paidCount = 0, collected = 0;
     $('cupLedger').innerHTML = entrants.map(function(e){
       var l = ledger[e.name] || {}, paid = !!l.paid;
       if(paid){ paidCount++; collected += t.buyIn; }
       var membersSub = (t.entryType !== 'singles' && e.members && e.members.length) ? '<div class="sub2">' + esc(e.members.join(', ')) + '</div>' : '';
+      var place = placeOf[e.name] ? ' <span class="sub2" style="display:inline">' + esc(placeOf[e.name]) + '</span>' : '';
       var payTag = payFor[e.name] ? ' <span class="pay">$' + payFor[e.name] + '</span>' : '';
       var status = paid
         ? '<span class="led-paid">Paid</span>' + (l.by ? ' · ' + esc(l.by) + (l.at ? ' · ' + shortWhen(l.at) : '') : '')
         : '<span class="led-unpaid">Unpaid</span>';
       var btn = canManage() ? '<button class="led-toggle" data-paid="' + esc(e.name) + '" data-now="' + (paid ? '1' : '0') + '">' + (paid ? 'Mark unpaid' : 'Mark paid') + '</button>' : '';
-      return '<div class="led-row"><div><div class="nm">' + esc(e.name) + payTag + '</div>' + membersSub +
+      return '<div class="led-row"><div><div class="nm">' + esc(e.name) + place + payTag + '</div>' + membersSub +
         '<div class="sub2">' + status + '</div></div><div>' + btn + '</div></div>';
     }).join('');
     var owe = entrants.length - paidCount, pot = t.buyIn * entrants.length;
@@ -2103,6 +2215,57 @@
     if(!confirm('Reissue the join code for “' + t.name + '”? The current code stops working — anyone scoring on another device must rejoin with the new one.')) return;
     var r = await Api.updateTournament(t.id, 'regenCode', {});
     if(r && r.state){ applyState(r.state); var code = (r.data && r.data.code) || (cupById(t.id) || {}).code; if(code) addJoined(t.id, code); renderAll(); if(code) toast('New join code: ' + code); }
+    else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+  }
+
+  /* ---- third-place split / skip ---- */
+  // the dollars each of the two entrants receives on a shared third place (higher seed keeps any odd $1)
+  function thirdSplitAmounts(t, pair){
+    var amounts = (t.payout && t.payout.amounts) || [];
+    var total = (+amounts[2] || 0) + (+amounts[3] || 0);
+    var each = Math.floor(total / 2), rem = total - each * 2;
+    var hi = higherSeed(t, pair[0], pair[1]);
+    var out = {}; out[hi] = each + rem; out[pair[0] === hi ? pair[1] : pair[0]] = each;
+    return { map: out, hi: hi, total: total };
+  }
+  function openSplitThird(){
+    var t = currentCup(), tp = t && t.thirdPlace;
+    if(!tp || tp.split || tp.played || claimLive(tp)){ toast('That match can no longer be split'); return; }
+    var pair = [tp.a, tp.b], amt = thirdSplitAmounts(t, pair);
+    $('splitSub').textContent = 'Cancel “' + tp.a + ' vs ' + tp.b + '” and record both as tied for third.';
+    var money = amt.total > 0
+      ? '<div class="pot-row"><span>' + esc(pair[0]) + '</span><span>$' + amt.map[pair[0]] + '</span></div>' +
+        '<div class="pot-row"><span>' + esc(pair[1]) + '</span><span>$' + amt.map[pair[1]] + '</span></div>' +
+        '<div class="pot-row total"><span>Third + fourth</span><span>$' + amt.total + '</span></div>' +
+        '<div class="note" style="margin-top:6px">Any odd dollar goes to ' + esc(amt.hi) + ' (the higher seed).</div>'
+      : '<div class="note">No buy-in — this just records a shared third place, no money involved.</div>';
+    $('splitAmounts').innerHTML = money;
+    $('splitAgreeA').checked = false; $('splitAgreeB').checked = false;
+    $('splitLblA').textContent = pair[0] + ' agrees';
+    $('splitLblB').textContent = pair[1] + ' agrees';
+    $('splitConfirmBtn').disabled = true;
+    $('splitVeil').classList.add('open');
+  }
+  async function confirmSplitThird(){
+    var t = currentCup(), tp = t && t.thirdPlace;
+    if(!tp || tp.split || tp.played){ $('splitVeil').classList.remove('open'); return; }
+    t.thirdPlace = { thirdPlace:true, split:true, tied:[tp.a, tp.b] };   // optimistic
+    $('splitVeil').classList.remove('open');
+    renderAll();
+    var r = await Api.updateTournament(t.id, 'splitThird', {}, actingCode(t.id));
+    if(r && r.state){ applyState(r.state); renderAll(); toast('Third place shared'); }
+    else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
+    else if(r && (r.queued || r.offline)) toast('Split queued — will apply when reconnected');
+  }
+  async function cupSetThird(enabled){
+    if(!requireManage()) return;
+    var t = currentCup(); if(!t) return;
+    t.thirdEnabled = enabled;                                            // optimistic
+    if(enabled && t.thirdPlace && t.thirdPlace.split) t.thirdPlace = null;
+    cupThirdPlace(t);
+    renderAll();
+    var r = await Api.updateTournament(t.id, 'setThird', { enabled: enabled });
+    if(r && r.state){ applyState(r.state); renderAll(); toast(enabled ? 'Third-place match added' : 'Third place shared'); }
     else if(r && r.refused){ toast(r.error); var f = await Api.getState(); if(f){ applyState(f); renderAll(); } }
   }
 
@@ -2131,7 +2294,8 @@
     $('cupClock').value = league.cfg.clockMin; $('cupBoards').value = 2;
     $('cupLimit').value = league.cfg.scoreLimit; $('cupSd').value = league.cfg.sdScore;
     $('cupPowerups').checked = false; $('cupCountSeason').checked = false; $('cupSeeding').value = 'random';
-    $('cupBuyIn').value = 0; $('cupPayoutPreset').value = '50_30_20'; payoutPlaces = []; renderMoneySetup();
+    $('cupBuyIn').value = 0; $('cupPayoutPreset').value = '50_30_20'; payoutPlaces = [];
+    cupThirdUserSet = false; $('cupThirdSetting').value = 'skip'; renderMoneySetup();
     $('cupFormScreen').style.display = 'block'; $('cupReviewScreen').style.display = 'none';
     cupEntryChanged();
     $('cupSetupVeil').classList.add('open');
@@ -2228,6 +2392,7 @@
       status: 'active',
       entrants: seeded,
       rounds: buildBracket(tid, seeded),
+      thirdEnabled: seeded.length >= 4 && $('cupThirdSetting').value === 'play',
       buyIn: buyIn,
       payout: buyIn > 0 ? { preset: $('cupPayoutPreset').value, places: payoutPlaces.map(function(p){ return { pct:p.pct, fixed:p.fixed }; }), amounts: computePayouts(buyIn, seeded.length, payoutPlaces).amounts } : null,
       ledger: {},
@@ -2239,7 +2404,7 @@
   }
   function renderReview(){
     var t = cupDraft, N = t.entrants.length, byes = (t.rounds[0].length * 2) - N;
-    $('cupReviewSub').textContent = t.name + ' · ' + N + ' entrants' + (byes ? ' · ' + byes + ' bye' + (byes>1?'s':'') : '') + ' · ' + t.boards + ' board' + (t.boards>1?'s':'');
+    $('cupReviewSub').textContent = t.name + ' · ' + N + ' entrants' + (byes ? ' · ' + byes + ' bye' + (byes>1?'s':'') : '') + ' · ' + t.boards + ' board' + (t.boards>1?'s':'') + (t.thirdEnabled ? ' · third-place playoff' : '');
     $('cupReviewCode').innerHTML = '<div class="lbl">Join code</div><div class="code">' + esc(t.code) + '</div><div class="hint">Players enter this to score from their own device</div>';
     var money = $('cupReviewMoney');
     if(t.buyIn > 0 && t.payout){
@@ -2274,21 +2439,38 @@
     selectedCupId = t.id;
     renderCupPicker(vis, t);
     var done = t.status === 'done';
+    var thirdNote = (t.entrants||[]).length >= 4 ? ' · third place ' + (((t.thirdPlace && t.thirdPlace.split) || !t.thirdEnabled) ? 'shared' : 'playoff') : '';
     $('cupName').textContent = t.name;
     $('cupSub').textContent = (t.entrants||[]).length + ' entrants · ' + entryLabel(t) + ' · ' + t.boards + ' board' + (t.boards>1?'s':'') +
-      (t.buyIn > 0 ? ' · $' + t.buyIn + ' buy-in' : '') + (done ? ' · complete' : '');
+      (t.buyIn > 0 ? ' · $' + t.buyIn + ' buy-in' : '') + thirdNote + (done ? ' · complete' : '');
     renderCupCode(t);
     $('cupChampion').innerHTML = done && t.champion ? '<div class="champ"><div class="lbl">Champion</div><div class="who">' + esc(t.champion) + '</div></div>' : '';
     renderCupQueue(t);
     $('cupBracket').innerHTML = bracketHTML(t);
     renderLedger(t);
     $('cupManager').style.display = canManage() ? 'block' : 'none';
+    renderThirdToggle(t);
   }
+  // Manager control to skip the third-place match (both tied for third) or add it back.
+  function renderThirdToggle(t){
+    var btn = $('cupThirdToggleBtn');
+    var eligible = (t.entrants || []).length >= 4;
+    var thirdPlayed = t.thirdPlace && t.thirdPlace.played;   // a finished result — reopen to change, not toggle
+    if(!canManage() || !eligible || thirdPlayed){ btn.style.display = 'none'; return; }
+    var active = t.thirdEnabled && !(t.thirdPlace && t.thirdPlace.split);   // a playoff will or does happen
+    btn.style.display = 'block';
+    btn.textContent = active ? 'Skip the third-place match' : 'Add a third-place match';
+    btn.dataset.enable = active ? '0' : '1';
+  }
+  function matchTitle(t, m){ return m.thirdPlace ? 'Third place' : roundLabel(t, m.round); }
   function renderCupQueue(t){
     var el = $('cupQueue');
-    if(t.status === 'done'){ el.className = 'empty'; el.innerHTML = 'This cup is complete.'; return; }
-    var ready = cupReadyMatches(t);
-    if(!ready.length){ el.className = 'empty'; el.innerHTML = 'No matches are ready yet — winners feed the next round.'; return; }
+    var ready = cupReadyMatches(t);   // the third-place playoff sits here alongside the final
+    if(!ready.length){
+      el.className = 'empty';
+      el.innerHTML = t.status === 'done' ? 'This cup is complete.' : 'No matches are ready yet — winners feed the next round.';
+      return;
+    }
     el.className = '';
     var used = {}; ready.forEach(function(m){ if(claimLive(m)) used[m.claim.board] = 1; });
     var free = []; for(var b = 1; b <= t.boards; b++){ if(!used[b]) free.push(b); }
@@ -2303,8 +2485,10 @@
       } else {
         right = '<span class="cup-live" style="color:var(--dim)">Waiting for a board</span>';
       }
+      // the third-place match can be split instead of played (either entrant), until it is claimed
+      var split = (m.thirdPlace && !claimLive(m)) ? '<div style="margin-top:6px"><button class="br-reopen" data-split3="1">Split third place</button></div>' : '';
       return '<div class="queue-item"><div><div class="nm">' + esc(m.a) + ' vs ' + esc(m.b) + '</div>' +
-        '<div class="sub2">' + roundLabel(t, m.round) + '</div></div><div style="white-space:nowrap">' + right + '</div></div>';
+        '<div class="sub2">' + matchTitle(t, m) + '</div>' + split + '</div><div style="white-space:nowrap">' + right + '</div></div>';
     }).join('');
   }
 
@@ -2333,6 +2517,7 @@
       limit: t.rules.scoreLimit, left: t.rules.clockMin * 60, sdScore: t.rules.sdScore,
       running:false, sd:false, over:false, htH:0, htA:0,
       tourney: { id: t.id, matchId: matchId, cup: t.name, board: board, countSeason: t.countSeason && t.entryType === 'singles',
+        third: !!m.thirdPlace,
         homeMembers: t.entryType !== 'singles' ? cupEntrantMembers(t, m.a) : [],
         awayMembers: t.entryType !== 'singles' ? cupEntrantMembers(t, m.b) : [] }
     };
@@ -2363,7 +2548,7 @@
     game = null;
     $('recVeil').classList.remove('open'); $('live').style.display = 'none'; $('pregame').style.display = 'block';
     renderAll(); gotoView('cup');
-    toast(winner + ' advances');
+    toast(g.tourney.third ? (winner + ' takes third') : (winner + ' advances'));
     // send both writes and apply only the final state to avoid a mid-flight flicker
     (async function(){
       var r1 = await Api.recordMatch(rec);
@@ -2412,6 +2597,7 @@
     if(newWinner !== bm.winner){
       var d = downstreamMatch(t, bm);
       if(d && d.played){ toast('A later round has already been played — reopen it first'); return; }
+      if(cupIsSemi(t, bm) && cupThirdResolved(t)){ toast('The third-place match is already settled — reopen it first'); return; }
     }
     $('manualVeil').classList.remove('open');
     (async function(){
@@ -2428,6 +2614,7 @@
     if(!t || !bm) return false;
     var d = downstreamMatch(t, bm);
     if(d && d.played){ toast('A later round has already been played — reopen it first'); return true; }
+    if(cupIsSemi(t, bm) && cupThirdResolved(t)){ toast('The third-place match is already settled — reopen it first'); return true; }
     if(!confirm('Discard this cup result? “' + m.home + ' vs ' + m.away + '” goes back to the queue to be replayed. It is kept as a discarded record.')) return true;
     var rec = Object.assign({}, m); rec.discarded = true;
     (async function(){
@@ -3140,13 +3327,23 @@
   $('cupRandomCancelBtn').addEventListener('click', function(){ $('cupRandomVeil').classList.remove('open'); });
   $('cupRandomConfirmBtn').addEventListener('click', function(){ $('cupRandomVeil').classList.remove('open'); cupGenerate(); });
   $('cupQueue').addEventListener('click', function(e){
-    var b = e.target.closest('[data-play],[data-resume],[data-release]'); if(!b) return;
-    if(b.dataset.play != null) cupPlay(b.dataset.play);
+    var b = e.target.closest('[data-play],[data-resume],[data-release],[data-split3]'); if(!b) return;
+    if(b.dataset.split3 != null) openSplitThird();
+    else if(b.dataset.play != null) cupPlay(b.dataset.play);
     else if(b.dataset.resume != null) cupPlay(b.dataset.resume);
     else if(b.dataset.release != null) cupRelease(b.dataset.release);
   });
   $('cupResetBtn').addEventListener('click', cupReset);
   $('cupRegenBtn').addEventListener('click', cupRegenCode);
+  $('cupThirdToggleBtn').addEventListener('click', function(){ cupSetThird(this.dataset.enable === '1'); });
+  /* ---- third-place split confirmation ---- */
+  function splitReady(){ $('splitConfirmBtn').disabled = !($('splitAgreeA').checked && $('splitAgreeB').checked); }
+  $('splitAgreeA').addEventListener('change', splitReady);
+  $('splitAgreeB').addEventListener('change', splitReady);
+  $('splitConfirmBtn').addEventListener('click', confirmSplitThird);
+  $('splitCancelBtn').addEventListener('click', function(){ $('splitVeil').classList.remove('open'); });
+  /* ---- third-place setting (setup) ---- */
+  $('cupThirdSetting').addEventListener('change', function(){ cupThirdUserSet = true; });
   $('cupBracket').addEventListener('click', function(e){
     var b = e.target.closest('[data-reopen]'); if(!b) return;
     cupReopen(b.dataset.reopen);
