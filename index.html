@@ -132,6 +132,38 @@
     color:var(--red);white-space:nowrap;background:var(--turf);padding:0 8px;
   }
   .clock-sub{font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;color:var(--dim);text-align:center;margin-top:3px}
+  .clock-adj{display:inline-block;margin-top:6px;font-family:var(--mono);font-size:.52rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:rgba(0,0,0,.2)}
+
+  /* home: champion showcase + this-season card */
+  .home-top{margin-bottom:18px}
+  .champ-empty{border:1px dashed var(--line);border-radius:14px;padding:20px 16px;text-align:center;font-family:var(--mono);font-size:.66rem;color:var(--dim);line-height:1.6}
+  .champ-wall{position:relative}
+  .champ-track{display:flex;gap:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;padding:2px 2px 8px}
+  .champ-track::-webkit-scrollbar{height:0}
+  .champ-slide{scroll-snap-align:center;flex:0 0 82%;display:flex;flex-direction:column;align-items:center;text-align:center;
+    border:1px solid var(--line);border-radius:16px;padding:18px 14px;background:var(--turf-2)}
+  .champ-slide .avatar--lg{border-color:var(--line)}
+  .champ-slide--hero{border-color:var(--gold);background:rgba(214,178,74,.08)}
+  .champ-eyebrow{font-family:var(--mono);font-size:.56rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+  .champ-name{font-family:var(--display);font-weight:800;font-size:1.5rem;letter-spacing:.04em;color:var(--chalk);margin-top:8px}
+  .champ-slide--hero .champ-name{font-size:2rem}
+  .champ-when{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;color:var(--dim);margin-top:3px}
+  .champ-rec{font-family:var(--mono);font-size:.66rem;color:var(--home);margin-top:8px}
+  .champ-nav{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);background:var(--turf-2);color:var(--chalk);font-size:1.1rem;line-height:1;z-index:2}
+  .champ-nav.prev{left:-6px}.champ-nav.next{right:-6px}
+  #seasonCard{border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px;background:var(--turf-2)}
+  .season-eyebrow{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .season-name{font-family:var(--display);font-weight:700;font-size:1.15rem;color:var(--chalk);margin:2px 0 8px}
+  .season-row{font-family:var(--body);font-size:.86rem;color:var(--chalk);line-height:1.5;margin-top:4px}
+  .season-row span{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-right:8px}
+  .season-quiet{color:var(--dim)}
+
+  /* mercy full-time banner (own-goal confirmation styling) */
+  #recMercy{border:1px solid var(--red);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:rgba(200,60,50,.12);text-align:center}
+  .mercy-head{font-family:var(--display);font-weight:800;font-size:1.2rem;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+  .mercy-line{font-family:var(--body);font-size:.92rem;color:var(--chalk);margin-top:6px;font-style:italic}
+  .pick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
   /* tables */
   table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.74rem}
@@ -276,6 +308,7 @@
   }
   .avatar--lg{width:60px;height:60px;font-size:1.4rem;margin-bottom:8px;border-color:var(--accent)}
   .avatar--sm{width:24px;height:24px;font-size:.66rem;margin-right:8px}
+  .avatar--xl{width:120px;height:120px;font-size:2.6rem;border-color:var(--gold);border-width:2px}
   .matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:10px;margin:4px 0 18px}
   .mu-side{display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center}
   .mu-side .avatar{width:56px;height:56px;font-size:1.3rem}
@@ -389,6 +422,10 @@
   <main>
     <!-- BOARD -->
     <section class="view on" id="v-board">
+      <div class="home-top">
+        <div id="champShowcase"></div>
+        <div id="seasonCard"></div>
+      </div>
       <div class="pregame" id="pregame">
         <h2>New match</h2>
         <div class="sub" id="pregameSub">Pick both players and declare selections before the opening flick.</div>
@@ -459,6 +496,7 @@
           <div>
             <button class="clock" id="clock">5:00</button>
             <div class="clock-sub" id="clockSub">Tap to start</div>
+            <button class="clock-adj" id="adjClockBtn" style="display:none">Adjust clock</button>
           </div>
           <button class="mid-btn right" id="endBtn">End</button>
           <div class="flag" id="flag" style="display:none"></div>
@@ -617,7 +655,11 @@
           <div class="field"><label>Score limit (0 = clock only)</label><input type="number" id="cfgLimit" min="0" max="20"></div>
           <div class="field"><label>Sudden death at tie of</label><input type="number" id="cfgSd" min="0" max="20"></div>
         </div>
-        <div class="note">Sudden death starts the moment the score is level at the tie mark, or when regulation time runs out level at any score. From there play runs on to the score limit, and the app pauses on every full minute without a goal to make both players remove a field peg.</div>
+        <div class="note">Sudden death starts the moment the score is level at the tie mark, and whenever regulation time runs out — at any score. From there play runs on to the score limit, and the app pauses on every full minute without a goal to make both players remove a field peg. In sudden death the End button lets a trailing player concede.</div>
+
+        <div class="check"><input type="checkbox" id="cfgMercyOn"><label for="cfgMercyOn" style="margin:0;font-family:var(--body);font-size:.86rem;text-transform:none;letter-spacing:0;color:var(--chalk)">Mercy rule — end the game at a big lead</label></div>
+        <div class="field" style="margin-top:10px"><label>Mercy goal margin</label><input type="number" id="cfgMercyMargin" min="1" max="20"></div>
+        <div class="note">When one player leads by this many goals the game ends immediately. Must be below the score limit, or it could never fire.</div>
 
         <h3>Kickoff countdown</h3>
         <div class="row">
@@ -630,6 +672,9 @@
 
         <h3>Season</h3>
         <div class="field"><label>Current season</label><input type="text" id="cfgSeason" maxlength="28" placeholder="August 2026"></div>
+        <div class="field"><label>Special rules for this season</label><textarea id="cfgSeasonRules" rows="3" maxlength="600" placeholder="e.g. Own goals count double. Belt on the line every Friday."></textarea></div>
+        <div class="field"><label>Prize / winnings</label><input type="text" id="cfgSeasonPrize" maxlength="120" placeholder="e.g. $100 pot and the golden flick"></div>
+        <div class="note">Rules and prize show on the home screen for everyone, and are filed with the season when it ends.</div>
         <button class="btn" id="saveCfgBtn">Save settings</button>
         <button class="btn btn--ghost" id="archiveBtn" style="margin-top:10px">End season and crown the champion</button>
         <div class="note">Files the final table and match log under past seasons, then resets standings for the new month. Standard Binho stats are never cleared.</div>
@@ -765,6 +810,7 @@
 <!-- record result -->
 <div class="veil" id="recVeil">
   <div class="sheet">
+    <div id="recMercy" style="display:none"></div>
     <div class="final-who" id="recWho">Full time</div>
     <div class="final-line" id="recLine">0 – 0</div>
     <div class="final-who" id="recTags"></div>
@@ -773,8 +819,39 @@
     <div class="note" id="recStdNote" style="display:none">Filed under standard play. It won't touch league standings, head to head, or selection stats.</div>
     <button class="btn btn--go" id="recSaveBtn" style="margin-top:8px">Record match</button>
     <button class="btn" id="recLastSecBtn" style="margin-top:10px">Last-second play</button>
+    <button class="btn" id="recAddTimeBtn" style="margin-top:10px">Add time</button>
     <button class="btn btn--ghost" id="recBackBtn" style="margin-top:10px">Back to the board</button>
     <button class="btn btn--danger" id="recDiscardBtn" style="margin-top:20px">Discard match</button>
+  </div>
+</div>
+
+<!-- end during sudden death: concede / forfeit -->
+<div class="veil" id="endSdVeil">
+  <div class="sheet">
+    <h2>End in sudden death?</h2>
+    <div class="sub" id="endSdBody" style="margin-bottom:14px"></div>
+    <div id="endSdPick" class="pick-grid" style="display:none"></div>
+    <button class="btn btn--danger" id="endSdConfirm" style="margin-top:4px;display:none">End the game</button>
+    <button class="btn btn--ghost" id="endSdCancel" style="margin-top:10px">Keep playing</button>
+  </div>
+</div>
+
+<!-- clock adjustment -->
+<div class="veil" id="clockAdjVeil">
+  <div class="sheet">
+    <h2 id="clockAdjTitle">Adjust the clock</h2>
+    <div class="sub" id="clockAdjSub" style="margin-bottom:14px"></div>
+    <div class="seg" id="clockAdjDir"><button class="on" data-dir="add">Add time</button><button data-dir="sub">Subtract</button></div>
+    <div class="chiprow" id="clockAdjChips" style="margin-bottom:6px">
+      <button class="chip" data-secs="30">30s</button>
+      <button class="chip" data-secs="60">1:00</button>
+      <button class="chip" data-secs="120">2:00</button>
+    </div>
+    <div class="field"><label>Amount (seconds or m:ss)</label><input type="text" id="clockAdjCustom" autocomplete="off" placeholder="e.g. 90 or 1:30"></div>
+    <div class="field"><label>Who made the change</label><select id="clockAdjWho"></select></div>
+    <div class="field" id="clockAdjNameRow" style="display:none"><label>Manager / admin name</label><input type="text" id="clockAdjName" maxlength="24" autocomplete="off" placeholder="Name"></div>
+    <button class="btn btn--go" id="clockAdjApply" style="margin-top:8px">Apply</button>
+    <button class="btn btn--ghost" id="clockAdjCancel" style="margin-top:10px">Cancel</button>
   </div>
 </div>
 
@@ -939,7 +1016,7 @@
     matches: [],
     belt: null,
     archives: [],
-    cfg: { winPts:3, csPts:1, clockMin:5, scoreLimit:7, sdScore:5, req:20, countdown:3, voice:true, seasonName:'' }
+    cfg: { winPts:3, csPts:1, clockMin:5, scoreLimit:7, sdScore:5, req:20, countdown:3, voice:true, seasonName:'', mercyOn:false, mercyMargin:5, seasonRules:'', seasonPrize:'' }
   };
 
   var game = null, undoStack = [], timer = null;
@@ -952,7 +1029,7 @@
   }
 
   /* ---------------- backend ---------------- */
-  function blank(){ return { players:[], members:[], matches:[], tournaments:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:''} }; }
+  function blank(){ return { players:[], members:[], matches:[], tournaments:[], belt:null, archives:[], photos:{}, hasManager:false, cfg:{winPts:3,csPts:1,clockMin:5,scoreLimit:7,sdScore:5,req:20,countdown:3,voice:true,seasonName:'',mercyOn:false,mercyMargin:5,seasonRules:'',seasonPrize:''} }; }
 
   var API = (window.BINHO_CONFIG && window.BINHO_CONFIG.apiUrl) || '';
 
@@ -1127,7 +1204,7 @@
       updateMatch: function(m, op){ return write({ action: 'updateMatch', match: m, op: op }); },
       saveRoster: function(players, mem){ return write({ action: 'roster', players: players, members: mem }); },
       saveSettings: function(cfg){ return write({ action: 'settings', cfg: cfg }); },
-      endSeason: function(a){ return write({ action: 'season', name: a.name, champion: a.champion, table: a.table }); },
+      endSeason: function(a){ return write({ action: 'season', name: a.name, champion: a.champion, table: a.table, rules: a.rules, prize: a.prize }); },
       wipe: function(){ return write({ action: 'wipe' }); },
       setPasscode: function(which, code){ return write({ action: 'passcode', which: which, code: code }); },
       savePhoto: function(name, image){ return write({ action: 'photo', name: name, image: image }); },
@@ -1182,7 +1259,7 @@
 
   function publicCfg(cfg){
     var out = {};
-    ['winPts','csPts','clockMin','scoreLimit','sdScore','req','countdown','voice','seasonName']
+    ['winPts','csPts','clockMin','scoreLimit','sdScore','req','countdown','voice','seasonName','mercyOn','mercyMargin','seasonRules','seasonPrize']
       .forEach(function(k){ out[k] = cfg[k]; });
     return out;
   }
@@ -1206,7 +1283,7 @@
       jobs.push({ action:'wipe' });
     } else if(league.archives.length > before.archives){
       var a = league.archives[0] || {};
-      jobs.push({ action:'season', name:a.name, champion:a.champion, table:a.table });
+      jobs.push({ action:'season', name:a.name, champion:a.champion, table:a.table, rules:a.rules, prize:a.prize });
     } else {
       var had = {};
       before.matchIds.forEach(function(id){ had[id] = true; });
@@ -1412,11 +1489,17 @@
 
   /* ---------------- standings ---------------- */
   function isStandard(m){ return m.type === 'standard'; }
+  // The winner, honouring a forfeit — a conceded game has a winner even at a level score.
+  function matchWinner(m){
+    if(m.forfeit) return m.forfeit === m.home ? m.away : m.home;
+    return m.sh > m.sa ? m.home : (m.sa > m.sh ? m.away : '');
+  }
+  function matchLoser(m){ var w = matchWinner(m); return w ? (w === m.home ? m.away : m.home) : ''; }
   function leagueMatches(){ return league.matches.filter(function(m){ return !isStandard(m) && m.official && !m.discarded; }); }
   function standardMatches(){ return league.matches.filter(function(m){ return isStandard(m) && !m.discarded; }); }
 
   function statsFor(name, matches){
-    var s = {name:name, gp:0, w:0, l:0, gf:0, ga:0, cs:0, ht:0, y:0, r:0, sy:0, t:0, og:0, pts:0, susp:false};
+    var s = {name:name, gp:0, w:0, l:0, gf:0, ga:0, cs:0, ht:0, y:0, r:0, sy:0, t:0, og:0, mercy:0, pts:0, susp:false};
     matches.forEach(function(m){
       var isH = m.home === name, isA = m.away === name;
       if(!isH && !isA) return;
@@ -1428,10 +1511,12 @@
       s.sy += isH ? (m.syH||0) : (m.syA||0);
       s.og += isH ? (m.ogH||0) : (m.ogA||0);
       s.t += isH ? (m.tH||0) : (m.tA||0);
-      if(mine > theirs){
+      var win = matchWinner(m);
+      if(win === name){
         s.w++; s.pts += league.cfg.winPts;
         if(theirs === 0){ s.cs++; s.pts += league.cfg.csPts; }
-      } else { s.l++; }
+        if(m.mercy) s.mercy++;
+      } else if(win){ s.l++; }   // a decided game we didn't win → a loss (a true draw counts as neither)
     });
     var last = matches.filter(function(m){ return m.home === name || m.away === name; })[0];
     if(last){ var tech = last.home === name ? (last.tH||0) : (last.tA||0); s.susp = tech >= 2; }
@@ -1527,7 +1612,8 @@
       limit: std ? 7 : league.cfg.scoreLimit,
       left: std ? 0 : league.cfg.clockMin * 60,
       sdScore: league.cfg.sdScore,
-      running:false, sd:false, over:false, htH:0, htA:0
+      running:false, sd:false, over:false, htH:0, htA:0,
+      forfeit:'', mercy:false, clockAdjs:[]
     };
     undoStack = [];
     $('pregame').style.display = 'none';
@@ -1561,13 +1647,21 @@
     var sd = game.sdScore != null ? game.sdScore : league.cfg.sdScore;   // tournament games carry their own mark
     return !game.std && game.sh === game.sa && game.sh >= sd;
   }
+  // the mercy rule fires once the lead reaches the configured margin (league games only)
+  function mercyReached(){
+    if(game.std || !league.cfg.mercyOn) return false;
+    var margin = +league.cfg.mercyMargin || 0;
+    if(margin <= 0 || (game.limit > 0 && margin >= game.limit)) return false;   // must be below the score limit to ever fire
+    return Math.abs(game.sh - game.sa) >= margin;
+  }
 
   // Decide and act on the ending once the clock is spent (clock ran out, or a last-second
   // play is confirmed). Reuses endGame / enterSuddenDeath so the rules cannot drift.
   function resolveEnding(){
     if(reachedLimit()){ endGame(); return; }
-    if(game.sh === game.sa){ enterSuddenDeath('time'); return; }   // clock's up and it's level → sudden death
-    endGame();                                                     // someone leads → that result stands
+    if(game.std){ endGame(); return; }                             // standard play has no clock or sudden death
+    if(mercyReached()){ endGame({ mercy:true }); return; }
+    enterSuddenDeath('time');                                      // clock's up → always sudden death now, whatever the score
   }
 
   function applyGoal(side){
@@ -1578,6 +1672,7 @@
     // once, on Confirm, by resolveEnding() — nothing auto-ends here
     if(game.lastSecond){ renderLive(); return; }
     if(reachedLimit()){ endGame(); return; }
+    if(mercyReached()){ endGame({ mercy:true }); return; }         // a big enough lead ends it on the spot
     // house rule: a tie at the sudden-death mark ends regulation on the spot
     if(!game.sd && tieAtSdMark()){ enterSuddenDeath('score'); return; }
     // a goal in sudden death does not touch the clock — the minute keeps running
@@ -1700,7 +1795,7 @@
       'First to ' + game.limit + ' wins',
       (cause === 'score'
         ? 'Level at ' + game.sh + '–' + game.sa + '. '
-        : 'Regulation is over and it is level at ' + game.sh + '–' + game.sa + '. ') +
+        : 'Regulation is over at ' + game.sh + '–' + game.sa + '. ') +
       'Play runs on until a side reaches ' + game.limit + '. Every full minute without a goal, each player removes one of their own field pegs — goalkeepers stay on the board.',
       'Start sudden death');
     renderLive();
@@ -1732,31 +1827,96 @@
     renderLive();
   }
 
-  function endGame(){
+  // affectionate ribbing for the mercy screen — rotated at random, names the two sides
+  var MERCY_LINES = [
+    'Get the flick outta here, {loser}',
+    '{loser}, the practice field is calling',
+    'Mercy. Somebody go check on {loser}',
+    '{winner} said no more. {loser} agreed.',
+    'That’s enough, {loser}. Go get some water.',
+    '{loser} brought a finger to a flick fight',
+    'Mercy rule invoked. {loser} lives to flick another day.',
+    '{loser} has officially entered the offseason'
+  ];
+  function mercyLine(winner, loser){
+    var t = MERCY_LINES[Math.floor(Math.random() * MERCY_LINES.length)];
+    return t.replace(/\{winner\}/g, winner).replace(/\{loser\}/g, loser);
+  }
+
+  function endGame(opts){
     if(!game) return;
+    opts = opts || {};
+    if(opts.mercy) game.mercy = true;
     exitLastSecond();
     stopClock(); game.running = false; game.over = true;
     $('sdVeil').classList.remove('open');
+    $('endSdVeil').classList.remove('open');
     whistle(W_FULLTIME);
-    say('Full time');
-    var win = game.sh > game.sa ? game.home : (game.sa > game.sh ? game.away : null);
-    $('recWho').textContent = win ? win + ' wins' : 'Level — no winner';
+    say(game.mercy ? 'Mercy rule' : 'Full time');
+    var win = matchWinner(game);   // forfeit-aware — a conceded level game still has a winner
+    var forfeited = !!game.forfeit;
+    $('recWho').textContent = win ? (win + (forfeited ? ' wins by forfeit' : ' wins')) : 'Level — no winner';
     $('recLine').textContent = Math.max(game.sh, game.sa) + ' – ' + Math.min(game.sh, game.sa);
     var tags = [];
     if(game.std) tags.push('Standard Binho');
     if(game.sd) tags.push('Sudden death');
-    if(win && Math.min(game.sh, game.sa) === 0) tags.push('Clean sheet');
-    if(Math.abs(game.sh - game.sa) >= 5 && !game.std) tags.push('Mercy rule');
+    if(forfeited) tags.push('Forfeit');
+    if(game.mercy) tags.push('Mercy rule');
+    if(win && Math.min(game.sh, game.sa) === 0 && !forfeited) tags.push('Clean sheet');
     if(game.ogH + game.ogA) tags.push(game.std ? 'Own goal' : 'Own goal — player removed');
     if(game.belt) tags.push('Belt match');
     if(game.mode !== 'Standard' && !game.std) tags.push(game.mode);
     $('recTags').textContent = tags.join(' · ');
+    // mercy banner + ribbing, styled like the own-goal confirmation
+    var mercyEl = $('recMercy');
+    if(game.mercy && win){
+      mercyEl.style.display = 'block';
+      mercyEl.innerHTML = '<div class="mercy-head">Mercy rule — game over</div><div class="mercy-line">' + esc(mercyLine(win, matchLoser(game))) + '</div>';
+    } else mercyEl.style.display = 'none';
     $('recOfficialRow').style.display = game.std ? 'none' : 'flex';
     $('recStdNote').style.display = game.std ? 'block' : 'none';
     $('recOfficial').checked = true;
+    $('recAddTimeBtn').style.display = game.std ? 'none' : 'block';   // add-time only makes sense with a clock
     decorateRecordModal();   // cup matches show "advances" and hide the league-only bits
     $('recVeil').classList.add('open');
     renderLive();
+  }
+
+  // The End button: in regulation it ends the game as before; in sudden death it lets a player
+  // concede rather than play on. Reuses endGame — the concede just sets game.forfeit first.
+  function pressEnd(){
+    if(!game) return;
+    if(!game.sd){ endGame(); return; }
+    if(game.sh !== game.sa){
+      var leader = game.sh > game.sa ? game.home : game.away;
+      openEndSd('uneven', leader);
+    } else {
+      openEndSd('level');
+    }
+  }
+  function openEndSd(mode, leader){
+    var body = $('endSdBody'), pick = $('endSdPick'), confirm = $('endSdConfirm');
+    if(mode === 'uneven'){
+      body.textContent = leader + ' leads ' + Math.max(game.sh, game.sa) + '–' + Math.min(game.sh, game.sa) +
+        '. End now and the trailing player concedes — recorded as a forfeit.';
+      pick.style.display = 'none';
+      confirm.style.display = 'block';
+      confirm.textContent = 'End — ' + leader + ' wins';
+      confirm.dataset.forfeit = (game.sh > game.sa ? game.away : game.home);   // the one behind concedes
+    } else {
+      body.textContent = 'It’s level at ' + game.sh + '–' + game.sa + ', so a plain End has no winner. Who is conceding? The other player wins by forfeit.';
+      confirm.style.display = 'none';
+      pick.style.display = 'grid';
+      pick.innerHTML = '<button class="btn" data-concede="' + esc(game.home) + '">' + esc(game.home) + ' concedes</button>' +
+                       '<button class="btn" data-concede="' + esc(game.away) + '">' + esc(game.away) + ' concedes</button>';
+    }
+    $('endSdVeil').classList.add('open');
+  }
+  function concedeEnd(forfeiter){
+    if(!game) return;
+    game.forfeit = forfeiter;   // the conceding side; matchWinner names the other
+    $('endSdVeil').classList.remove('open');
+    endGame({ forfeit:true });
   }
 
   // reopen the live board to record something that happened before the buzzer
@@ -1784,8 +1944,69 @@
       yH:g.yH, yA:g.yA, rH:g.rH, rA:g.rA, tH:g.tH, tA:g.tA, syH:g.syH, syA:g.syA,
       htH:0, htA:0, ogH:g.ogH, ogA:g.ogA, mvp:'',
       puH:g.puH, puA:g.puA, ecH:g.ecH, ecA:g.ecA,
-      official: g.std ? false : $('recOfficial').checked
+      official: g.std ? false : $('recOfficial').checked,
+      forfeit: g.forfeit || '', mercy: !!g.mercy, clockAdj: clockAdjSummary(g)
     };
+  }
+
+  // a compact, human-readable summary of the clock changes, e.g. "Hanke +1:30 (mid-game)"
+  function clockAdjSummary(g){
+    if(!g.clockAdjs || !g.clockAdjs.length) return '';
+    return g.clockAdjs.map(function(a){
+      return a.who + ' ' + (a.secs < 0 ? '-' : '+') + fmt(Math.abs(a.secs)) + ' (' + a.phase + ')';
+    }).join('; ');
+  }
+
+  /* ---------------- clock adjustment (mid-game and post-buzzer) ---------------- */
+  var clockAdjPhase = 'mid';
+  function parseAdjSecs(str){
+    str = String(str || '').trim();
+    if(/^\d{1,3}:\d{1,2}$/.test(str)){ var p = str.split(':'); return (+p[0]) * 60 + (+p[1]); }
+    var n = parseInt(str, 10);
+    return isNaN(n) || n < 0 ? 0 : n;
+  }
+  function openClockAdj(phase){
+    if(!game || game.std) return;
+    clockAdjPhase = phase;
+    $('clockAdjTitle').textContent = phase === 'post' ? 'Add time after the buzzer' : 'Adjust the clock';
+    $('clockAdjSub').textContent = phase === 'post'
+      ? 'Put time back on the clock and return to the board — for a buzzer that came too early.'
+      : 'For a clock that started late or was left paused. Add or take off time.';
+    $('clockAdjCustom').value = '';
+    document.querySelectorAll('#clockAdjDir button').forEach(function(b){ b.classList.toggle('on', b.dataset.dir === 'add'); });
+    $('clockAdjWho').innerHTML = '<option value="home">' + esc(game.home) + '</option>' +
+      '<option value="away">' + esc(game.away) + '</option>' +
+      '<option value="mgr">Manager / Admin</option>';
+    $('clockAdjNameRow').style.display = 'none';
+    $('clockAdjName').value = '';
+    $('clockAdjVeil').classList.add('open');
+  }
+  function applyClockAdj(){
+    if(!game) return;
+    var secs = parseAdjSecs($('clockAdjCustom').value);
+    if(secs <= 0){ toast('Choose how much time to change'); return; }
+    var sub = document.querySelector('#clockAdjDir button.on');
+    var signed = (sub && sub.dataset.dir === 'sub') ? -secs : secs;
+    var whoSel = $('clockAdjWho').value, who;
+    if(whoSel === 'home') who = game.home;
+    else if(whoSel === 'away') who = game.away;
+    else {
+      var nm = $('clockAdjName').value.trim();
+      if(!nm){ toast('Name who made the change'); return; }
+      who = 'Manager/' + nm;
+    }
+    game.left = Math.max(0, (game.left || 0) + signed);
+    game.clockAdjs = game.clockAdjs || [];
+    game.clockAdjs.push({ who: who, secs: signed, phase: clockAdjPhase === 'post' ? 'post-buzzer' : 'mid-game' });
+    $('clockAdjVeil').classList.remove('open');
+    if(clockAdjPhase === 'post'){          // reopen the board so play can continue on the restored clock
+      game.over = false;
+      stopClock(); game.running = false;
+      $('recVeil').classList.remove('open');
+      $('live').style.display = 'grid'; $('pregame').style.display = 'none';
+    }
+    renderLive();
+    toast('Clock ' + (signed < 0 ? 'set back ' : 'given ') + fmt(Math.abs(signed)) + ' — ' + who);
   }
 
   function leaveBoard(){
@@ -1797,11 +2018,12 @@
 
   async function saveMatch(){
     var g = game; if(!g) return;
+    if(!g.std && !matchWinner(g)){ toast('This game is level with no winner — decide it before recording'); return; }
     var rec = recordFromGame(g);
     await commit(function(db){
       db.matches.unshift(rec);
-      if(rec.belt && !g.std && rec.sh !== rec.sa){
-        db.belt = { holder: rec.sh > rec.sa ? rec.home : rec.away, since: rec.ts };
+      if(rec.belt && !g.std && matchWinner(rec)){
+        db.belt = { holder: matchWinner(rec), since: rec.ts };
       }
     });
     pushToSheet(rec);
@@ -2516,6 +2738,7 @@
       mode: t.name, belt:false,
       limit: t.rules.scoreLimit, left: t.rules.clockMin * 60, sdScore: t.rules.sdScore,
       running:false, sd:false, over:false, htH:0, htA:0,
+      forfeit:'', mercy:false, clockAdjs:[],
       tourney: { id: t.id, matchId: matchId, cup: t.name, board: board, countSeason: t.countSeason && t.entryType === 'singles',
         third: !!m.thirdPlace,
         homeMembers: t.entryType !== 'singles' ? cupEntrantMembers(t, m.a) : [],
@@ -2535,8 +2758,8 @@
   }
   function saveTournamentResult(){
     var g = game; if(!g || !g.tourney) return;
-    if(g.sh === g.sa){ toast('A cup match needs a winner — play on'); return; }
-    var winner = g.sh > g.sa ? g.home : g.away;
+    var winner = matchWinner(g);   // forfeit-aware: a conceded cup match still advances someone
+    if(!winner){ toast('A cup match needs a winner — play on'); return; }
     var rec = recordFromGame(g);
     rec.tournament = g.tourney.cup; rec.mode = g.tourney.cup; rec.belt = false;
     rec.official = !!g.tourney.countSeason;   // counts only when the cup opted in AND it is singles
@@ -2646,9 +2869,9 @@
     $('recDiscardBtn').style.display = tour ? 'none' : 'block';
     $('recSaveBtn').textContent = tour ? 'Record result' : 'Record match';
     if(tour){
-      var win = game.sh > game.sa ? game.home : (game.sa > game.sh ? game.away : null);
-      $('recWho').textContent = win ? (win + ' advances') : 'Level — play on';
-      $('recTags').textContent = game.tourney.cup + (game.sd ? ' · Sudden death' : '');
+      var win = matchWinner(game);
+      $('recWho').textContent = win ? (win + (game.forfeit ? ' advances by forfeit' : ' advances')) : 'Level — play on';
+      $('recTags').textContent = game.tourney.cup + (game.sd ? ' · Sudden death' : '') + (game.forfeit ? ' · Forfeit' : '');
       $('recOfficialRow').style.display = 'none';
       $('recStdNote').style.display = 'none';
     }
@@ -2785,8 +3008,8 @@
 
     await commit(function(db){
       db.matches.unshift(rec);
-      if(rec.belt && !std && rec.sh !== rec.sa){
-        db.belt = { holder: rec.sh > rec.sa ? rec.home : rec.away, since: rec.ts };
+      if(rec.belt && !std && matchWinner(rec)){
+        db.belt = { holder: matchWinner(rec), since: rec.ts };
       }
     });
     pushToSheet(rec);
@@ -2880,10 +3103,14 @@
       : game.sd ? 'Sudden death · first to ' + game.limit + (game.sdMin ? ' · ' + game.sdMin + ' pegs off each side' : '')
       : game.running ? 'Tap to pause' : (game.left === league.cfg.clockMin*60 ? 'Tap to start' : 'Tap to resume');
     var f = $('flag'), lead = Math.abs(game.sh - game.sa);
-    if(lead >= 5 && !game.over && !game.std){
+    var mercyActive = !game.std && league.cfg.mercyOn && (+league.cfg.mercyMargin || 0) > 0;
+    // the man-down warning still shows on a big lead, but not where the mercy rule would already end it
+    if(lead >= 5 && !game.over && !game.std && !(mercyActive && lead >= league.cfg.mercyMargin)){
       f.style.display = 'block';
       f.textContent = (game.sh > game.sa ? game.home : game.away) + ' plays one defender short';
     } else f.style.display = 'none';
+    var adj = $('adjClockBtn');
+    if(adj) adj.style.display = (!game.std && !game.over) ? 'block' : 'none';
   }
 
   function fillSelect(el, arr, ph){
@@ -2976,6 +3203,8 @@
     if(cl && cl.cs) bits.push('Clean sheets — ' + esc(cl.name) + ' (' + cl.cs + ')');
     var og = rows.slice().sort(function(a,b){ return b.og - a.og; })[0];
     if(og && og.og) bits.push('Own goals — ' + esc(og.name) + ' (' + og.og + ')');
+    var mc = rows.slice().sort(function(a,b){ return (b.mercy||0) - (a.mercy||0); })[0];
+    if(mc && mc.mercy) bits.push('Mercy wins — ' + esc(mc.name) + ' (' + mc.mercy + ')');
     $('leaders').innerHTML = bits.length
       ? '<div class="note" style="font-size:.7rem">' + bits.join('<br>') + '</div>'
       : 'Play a match to fill this in.';
@@ -3021,7 +3250,7 @@
       [['home','H'], ['away','A']].forEach(function(pair){
         var who = m[pair[0]], S = pair[1];
         if(player && who !== player) return;
-        var won = S === 'H' ? m.sh > m.sa : m.sa > m.sh;
+        var won = matchWinner(m) === who;
         var p = m['pu'+S], e = m['ec'+S];
         if(p){ if(!pu[p]) pu[p] = {picks:0, w:0}; pu[p].picks++; if(won) pu[p].w++; puPicks++; }
         if(e){ if(!ec[e]) ec[e] = {picks:0, w:0}; ec[e].picks++; if(won) ec[e].w++; ecPicks++; }
@@ -3183,22 +3412,26 @@
     else if(m.tournament) tags.push(m.tournament);   // a cup match is tagged with the cup, not "For fun"
     else if(!m.official) tags.push('For fun');
     if(m.sd) tags.push('Sudden death');
+    if(m.forfeit) tags.push('Forfeit');
+    if(m.mercy) tags.push('Mercy rule');
     if(m.belt) tags.push('Belt');
     if(m.mode && m.mode !== 'Standard' && m.mode !== 'Standard Binho' && m.mode !== m.tournament) tags.push(m.mode);
     if((m.htH||0)+(m.htA||0)) tags.push('Hat trick');
     if((m.tH||0)+(m.tA||0)) tags.push('Technical');
     if((m.ogH||0)+(m.ogA||0)) tags.push('Own goal');
+    if(m.clockAdj) tags.push('Clock adjusted');
     if(m.edited) tags.push('Edited');
     if(m.entry === 'manual') tags.push('Entered by hand');
     if(m.discarded) tags.push('Discarded');
     return tags;
   }
   function logLine(m){
-    var win = m.sh > m.sa ? m.home : m.away, lose = m.sh > m.sa ? m.away : m.home;
+    var win = matchWinner(m) || m.home, lose = matchWinner(m) ? matchLoser(m) : m.away;
     var when = new Date(m.ts).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     var tags = logTags(m);
+    var adj = m.clockAdj ? '<div class="tags" style="white-space:normal;color:var(--yellow)">Clock: ' + esc(m.clockAdj) + '</div>' : '';
     return '<div><div class="who">' + esc(win) + ' beat ' + esc(lose) + '</div>' +
-      '<div class="tags">' + when + (tags.length ? ' · ' + tags.join(' · ') : '') + '</div></div>';
+      '<div class="tags">' + when + (tags.length ? ' · ' + tags.join(' · ') : '') + '</div>' + adj + '</div>';
   }
 
   function renderLog(){
@@ -3233,10 +3466,10 @@
     }
 
     // export mirrors the Log sheet exactly — discarded games live in their own sheet, so they are left out
-    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited','Tournament','HomeMembers','AwayMembers'];
+    var head = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Winner','SuddenDeath','CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech','HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals','AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece','Time','Edited','Tournament','HomeMembers','AwayMembers','Forfeit','ClockAdjustments','MercyRule'];
     var memberCell = function(v){ return Array.isArray(v) ? v.join(', ') : (v || ''); };
     var rows = active.map(function(m){
-      var win = m.sh > m.sa ? m.home : m.away;
+      var win = matchWinner(m);
       var cs = Math.min(m.sh, m.sa) === 0 ? 'Yes' : 'No';
       var d = new Date(m.ts);
       return [m.id, d.toISOString().slice(0,10), isStandard(m)?'Standard':'League', m.home, m.away, m.sh, m.sa, win, m.sd?'Yes':'No', cs,
@@ -3245,7 +3478,8 @@
         m.yA||0, m.rA||0, m.syA||0, m.tA||0, m.ogA||0, (m.rA||0) + (isStandard(m) ? 0 : (m.ogA||0)),
         m.htH||0, m.htA||0,
         m.puH||'', m.puA||'', m.ecH||'', m.ecA||'', m.mvp||'', d.toISOString().slice(11,19), m.edited?'Yes':'', m.tournament||'',
-        memberCell(m.homeMembers), memberCell(m.awayMembers)].join('\t');
+        memberCell(m.homeMembers), memberCell(m.awayMembers),
+        m.forfeit||'', m.clockAdj||'', m.mercy?'Yes':'No'].join('\t');
     });
     $('exportBox').value = [head.join('\t')].concat(rows).join('\n');
   }
@@ -3260,15 +3494,57 @@
     el.className = '';
     el.innerHTML = league.archives.slice(0, 12).map(function(a){
       var when = new Date(a.closed).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
-      var games = a.matches ? a.matches.length : 0;
-      return '<div class="log-item"><div><div class="who">' + esc(a.name || 'Season') + '</div>' +
-        '<div class="tags">Champion ' + esc(a.champion || '—') + ' · ' + games + ' ' + (games === 1 ? 'game' : 'games') + '</div></div>' +
-        '<div style="color:var(--dim)">' + when + '</div></div>';
+      var games = (a.games != null) ? a.games : (a.matches ? a.matches.length : 0);
+      var extra = '';
+      if(a.prize) extra += '<div class="tags">Prize · ' + esc(a.prize) + '</div>';
+      if(a.rules) extra += '<div class="tags" style="white-space:normal">Rules · ' + esc(a.rules) + '</div>';
+      return '<div class="log-item" style="align-items:flex-start"><div><div class="who">' + esc(a.name || 'Season') + '</div>' +
+        '<div class="tags">Champion ' + esc(a.champion || '—') + ' · ' + games + ' ' + (games === 1 ? 'game' : 'games') + '</div>' + extra + '</div>' +
+        '<div style="color:var(--dim);white-space:nowrap">' + when + '</div></div>';
     }).join('');
   }
 
   function renderBelt(){
     $('beltHolder').textContent = league.belt && league.belt.holder ? league.belt.holder : 'Vacant';
+  }
+
+  /* ---------------- home screen: champion showcase + this-season card ---------------- */
+  function championRecord(a){
+    var row = (a.table || []).filter(function(r){ return r.name === a.champion; })[0];
+    if(!row) return '';
+    return row.w + '–' + row.l + (row.gf != null ? ' · ' + row.gf + ' GF / ' + row.ga + ' GA' : '');
+  }
+  function seasonPeriod(a){
+    if(a.name && /\d{4}/.test(a.name)) return a.name;   // season names are usually "Month Year"
+    try { return new Date(a.closed).toLocaleDateString(undefined, {month:'long', year:'numeric'}); } catch(e){ return a.name || ''; }
+  }
+  function renderHome(){
+    var champs = (league.archives || []).filter(function(a){ return a.champion; });
+    var sc = $('champShowcase');
+    if(!champs.length){
+      sc.innerHTML = '<div class="champ-empty">No champion crowned yet — close a season to start the wall of champions.</div>';
+    } else {
+      var slides = champs.map(function(a, i){
+        var hero = i === 0, rec = hero ? championRecord(a) : '';
+        return '<div class="champ-slide' + (hero ? ' champ-slide--hero' : '') + '">' +
+          (hero ? '<div class="champ-eyebrow">Reigning champion</div>' : '') +
+          avatarHTML(a.champion, hero ? 'avatar--xl' : 'avatar--lg') +
+          '<div class="champ-name">' + esc(a.champion) + '</div>' +
+          '<div class="champ-when">' + esc(seasonPeriod(a)) + '</div>' +
+          (hero && rec ? '<div class="champ-rec">' + esc(rec) + '</div>' : '') +
+          '</div>';
+      }).join('');
+      sc.innerHTML = '<div class="champ-wall">' +
+        (champs.length > 1 ? '<button class="champ-nav prev" aria-label="Previous champion">‹</button>' : '') +
+        '<div class="champ-track" tabindex="0">' + slides + '</div>' +
+        (champs.length > 1 ? '<button class="champ-nav next" aria-label="Next champion">›</button>' : '') + '</div>';
+    }
+    var card = $('seasonCard'), rules = league.cfg.seasonRules, prize = league.cfg.seasonPrize;
+    card.innerHTML = '<div class="season-eyebrow">This season</div>' +
+      '<div class="season-name">' + esc(seasonName()) + '</div>' +
+      (prize ? '<div class="season-row"><span>Prize</span>' + esc(prize) + '</div>' : '') +
+      (rules ? '<div class="season-row"><span>Rules</span>' + esc(rules) + '</div>' : '') +
+      (!prize && !rules ? '<div class="season-row season-quiet">No special rules or prize set for this season yet.</div>' : '');
   }
 
   function renderCfg(){
@@ -3281,9 +3557,13 @@
     $('cfgCount').value = league.cfg.countdown;
     $('cfgSeason').value = league.cfg.seasonName || defaultSeason();
     $('cfgVoice').checked = !!league.cfg.voice;
+    $('cfgMercyOn').checked = !!league.cfg.mercyOn;
+    $('cfgMercyMargin').value = league.cfg.mercyMargin != null ? league.cfg.mercyMargin : 5;
+    $('cfgSeasonRules').value = league.cfg.seasonRules || '';
+    $('cfgSeasonPrize').value = league.cfg.seasonPrize || '';
   }
 
-  function renderAll(){ renderPlayers(); renderStandings(); renderSelections(); renderMatchups(); renderLog(); renderSeasons(); renderBelt(); renderCfg(); renderCup(); }
+  function renderAll(){ renderPlayers(); renderStandings(); renderSelections(); renderMatchups(); renderLog(); renderSeasons(); renderBelt(); renderCfg(); renderCup(); renderHome(); }
 
   /* ---------------- wiring ---------------- */
   document.querySelectorAll('nav button').forEach(function(b){
@@ -3420,8 +3700,13 @@
   });
   $('undoBtn').addEventListener('click', undo);
   $('clock').addEventListener('click', toggleClock);
-  $('endBtn').addEventListener('click', endGame);
+  $('endBtn').addEventListener('click', pressEnd);
   $('sdGoBtn').addEventListener('click', resumeSD);
+  $('endSdCancel').addEventListener('click', function(){ $('endSdVeil').classList.remove('open'); });
+  $('endSdConfirm').addEventListener('click', function(){ concedeEnd(this.dataset.forfeit); });
+  $('endSdPick').addEventListener('click', function(e){
+    var b = e.target.closest('[data-concede]'); if(b) concedeEnd(b.dataset.concede);
+  });
 
   $('recSaveBtn').addEventListener('click', function(){ if(game && game.tourney) saveTournamentResult(); else saveMatch(); });
   $('recBackBtn').addEventListener('click', function(){
@@ -3429,7 +3714,46 @@
     if(game){ game.over = false; renderLive(); }
   });
   $('recLastSecBtn').addEventListener('click', lastSecondPlay);
+  $('recAddTimeBtn').addEventListener('click', function(){ openClockAdj('post'); });
   $('lsConfirmBtn').addEventListener('click', confirmLastSecond);
+  $('adjClockBtn').addEventListener('click', function(){ openClockAdj('mid'); });
+
+  /* clock-adjust veil */
+  $('clockAdjDir').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-dir]'); if(!b) return;
+    document.querySelectorAll('#clockAdjDir button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  });
+  $('clockAdjChips').addEventListener('click', function(e){
+    var b = e.target.closest('[data-secs]'); if(!b) return;
+    $('clockAdjCustom').value = fmt(+b.dataset.secs);
+  });
+  $('clockAdjWho').addEventListener('change', function(){ $('clockAdjNameRow').style.display = this.value === 'mgr' ? 'block' : 'none'; });
+  $('clockAdjApply').addEventListener('click', applyClockAdj);
+  $('clockAdjCancel').addEventListener('click', function(){ $('clockAdjVeil').classList.remove('open'); });
+
+  /* champion showcase — swipe (native scroll, never traps the page) + arrow keys + nav buttons */
+  function champScroll(dir){
+    var track = $('champShowcase').querySelector('.champ-track'); if(!track) return;
+    var slides = track.querySelectorAll('.champ-slide'); if(!slides.length) return;
+    var center = track.scrollLeft + track.clientWidth / 2, idx = 0, best = Infinity;
+    for(var i = 0; i < slides.length; i++){
+      var c = slides[i].offsetLeft + slides[i].clientWidth / 2, d = Math.abs(c - center);
+      if(d < best){ best = d; idx = i; }
+    }
+    idx = Math.max(0, Math.min(slides.length - 1, idx + dir));
+    var target = slides[idx].offsetLeft - (track.clientWidth - slides[idx].clientWidth) / 2;
+    try { track.scrollTo({ left: target, behavior: 'smooth' }); } catch(e){ track.scrollLeft = target; }
+    setTimeout(function(){ if(Math.abs(track.scrollLeft - target) > 4) track.scrollLeft = target; }, 80);   // land it even where smooth scroll is a no-op
+  }
+  $('champShowcase').addEventListener('click', function(e){
+    var b = e.target.closest('.champ-nav'); if(!b) return;
+    champScroll(b.classList.contains('next') ? 1 : -1);
+  });
+  $('champShowcase').addEventListener('keydown', function(e){
+    if(!e.target.closest('.champ-track')) return;
+    if(e.key === 'ArrowRight'){ e.preventDefault(); champScroll(1); }
+    else if(e.key === 'ArrowLeft'){ e.preventDefault(); champScroll(-1); }
+  });
 
   $('recDiscardBtn').addEventListener('click', function(){
     $('discardInput').value = '';
@@ -3574,16 +3898,26 @@
 
   $('saveCfgBtn').addEventListener('click', function(){
     if(!requireManage()) return;
+    var limit = Math.max(0, +$('cfgLimit').value || 0);
+    var mercyOn = $('cfgMercyOn').checked;
+    var mercyMargin = Math.max(1, +$('cfgMercyMargin').value || 5);
+    if(mercyOn && limit > 0 && mercyMargin >= limit){
+      toast('Mercy margin must be below the score limit (' + limit + ')'); return;
+    }
     commit(function(db){
       db.cfg.winPts = Math.max(1, +$('cfgWin').value || 3);
       db.cfg.csPts = Math.max(0, +$('cfgCS').value || 0);
       db.cfg.clockMin = Math.max(0, +$('cfgClock').value || 0);
       db.cfg.req = Math.max(1, +$('cfgReq').value || 20);
-      db.cfg.scoreLimit = Math.max(0, +$('cfgLimit').value || 0);
+      db.cfg.scoreLimit = limit;
       db.cfg.sdScore = Math.max(0, +$('cfgSd').value || 0);
       db.cfg.countdown = Math.max(0, Math.min(10, +$('cfgCount').value || 0));
       db.cfg.voice = $('cfgVoice').checked;
       db.cfg.seasonName = $('cfgSeason').value.trim() || defaultSeason();
+      db.cfg.mercyOn = mercyOn;
+      db.cfg.mercyMargin = mercyMargin;
+      db.cfg.seasonRules = $('cfgSeasonRules').value.trim();
+      db.cfg.seasonPrize = $('cfgSeasonPrize').value.trim();
     });
     toast('Settings saved');
   });
@@ -3610,10 +3944,13 @@
         table: final.map(function(x){
           return {name:x.name, gp:x.gp, w:x.w, l:x.l, gf:x.gf, ga:x.ga, gd:x.gd, cs:x.cs, pts:x.pts};
         }),
-        matches: db.matches.filter(function(m){ return !isStandard(m); })
+        matches: db.matches.filter(function(m){ return !isStandard(m); }),
+        rules: db.cfg.seasonRules || '',
+        prize: db.cfg.seasonPrize || ''
       });
       db.matches = db.matches.filter(isStandard);
       db.cfg.seasonName = defaultSeason();
+      db.cfg.seasonRules = ''; db.cfg.seasonPrize = '';   // a fresh season starts clean
     });
     toast(champ ? champ + ' takes the season' : 'Season closed');
   });

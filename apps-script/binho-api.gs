@@ -33,7 +33,8 @@ var HEADERS = ['MatchID','Date','Type','Home','Away','HomeGoals','AwayGoals','Wi
   'CleanSheet','Mode','BeltMatch','Official','HomeY','HomeR','HomeSecondYellowReds','HomeTech',
   'HomeOwnGoals','HomePegsLost','AwayY','AwayR','AwaySecondYellowReds','AwayTech','AwayOwnGoals',
   'AwayPegsLost','HomeHatTricks','AwayHatTricks','HomePowerUp','AwayPowerUp','HomeEvent','AwayEvent','MVPPiece',
-  'Time','Edited','Tournament','HomeMembers','AwayMembers'];   // appended last on purpose: Standings/Standard formulas reference columns by position
+  'Time','Edited','Tournament','HomeMembers','AwayMembers',
+  'Forfeit','ClockAdjustments','MercyRule'];   // appended last on purpose: Standings/Standard formulas reference columns by position
 
 /* ============================ setup ============================ */
 
@@ -102,7 +103,7 @@ function route_(body){
       : needs_(body.token, 'manager', function(){ return updateMatch_(body.match, body.op); }); // edit / restore
     case 'roster':      return needs_(body.token, 'manager', function(){ return saveRoster_(body.players, body.members); });
     case 'settings':    return needs_(body.token, 'manager', function(){ return saveSettings_(body.cfg); });
-    case 'season':      return needs_(body.token, 'admin',   function(){ return endSeason_(body.name, body.champion, body.table); });
+    case 'season':      return needs_(body.token, 'admin',   function(){ return endSeason_(body.name, body.champion, body.table, body.rules, body.prize); });
     case 'wipe':        return needs_(body.token, 'admin',   function(){ return wipe_(); });
     case 'passcode':    return needs_(body.token, 'admin',   function(){ return setPasscode_(body.which, body.code); });
     case 'createTournament': return needs_(body.token, 'manager', function(){ return createTournament_(body.tournament); });
@@ -233,7 +234,8 @@ function blankState_(){
   return {
     players: [], members: [], belt: null, archives: [],
     cfg: { winPts:3, csPts:1, clockMin:5, scoreLimit:7, sdScore:5, req:20,
-           countdown:3, voice:true, seasonName:'' }
+           countdown:3, voice:true, seasonName:'',
+           mercyOn:false, mercyMargin:5, seasonRules:'', seasonPrize:'' }
   };
 }
 
@@ -297,13 +299,14 @@ function saveRoster_(players, members){
 
 function saveSettings_(cfg){
   var state = readState_();
-  var allowed = ['winPts','csPts','clockMin','scoreLimit','sdScore','req','countdown','voice','seasonName'];
+  var allowed = ['winPts','csPts','clockMin','scoreLimit','sdScore','req','countdown','voice','seasonName',
+    'mercyOn','mercyMargin','seasonRules','seasonPrize'];
   allowed.forEach(function(k){ if(cfg && cfg.hasOwnProperty(k)) state.cfg[k] = cfg[k]; });
   writeState_(state);
   return { ok:true, state: readState_() };
 }
 
-function endSeason_(name, champion, table){
+function endSeason_(name, champion, table, rules, prize){
   var state = readState_();
   var league = readMatches_().filter(function(m){ return m.type !== 'standard' && !m.discarded; });
 
@@ -313,9 +316,13 @@ function endSeason_(name, champion, table){
     closed: Date.now(),
     champion: champion || '',
     table: table || [],
-    games: league.length
+    games: league.length,
+    rules: rules != null ? rules : (state.cfg.seasonRules || ''),   // preserve the season's rules and prize with it
+    prize: prize != null ? prize : (state.cfg.seasonPrize || '')
   });
   state.cfg.seasonName = '';
+  state.cfg.seasonRules = '';   // a new season starts with a clean slate
+  state.cfg.seasonPrize = '';
   writeState_(state);
 
   // archive the rows, then leave standard play in place
@@ -423,8 +430,8 @@ function recomputeBelt_(){
   var belt = null;
   for(var i = 0; i < matches.length; i++){
     var m = matches[i];
-    if(m.belt && m.type !== 'standard' && m.sh !== m.sa){
-      belt = { holder: m.sh > m.sa ? m.home : m.away, since: m.ts };
+    if(m.belt && m.type !== 'standard' && matchWin_(m)){
+      belt = { holder: matchWin_(m), since: m.ts };
       break;
     }
   }
@@ -433,10 +440,17 @@ function recomputeBelt_(){
   writeState_(state);
 }
 
+// The winner, honouring a forfeit: a conceded game names a winner even when the score is level.
+function matchWin_(m){
+  if(m.forfeit) return m.forfeit === m.home ? m.away : m.home;
+  var sh = num_(m.sh), sa = num_(m.sa);
+  return sh > sa ? m.home : (sa > sh ? m.away : '');
+}
+
 function matchToRow_(m){
   var standard = m.type === 'standard';
   var sh = num_(m.sh), sa = num_(m.sa);
-  var winner = sh > sa ? m.home : (sa > sh ? m.away : '');
+  var winner = matchWin_(m);
   return [
     m.id, formatDate_(m.ts), standard ? 'Standard' : 'League', m.home, m.away, sh, sa, winner,
     m.sd ? 'Yes' : 'No', Math.min(sh, sa) === 0 ? 'Yes' : 'No',
@@ -446,7 +460,8 @@ function matchToRow_(m){
     num_(m.htH), num_(m.htA),
     m.puH || '', m.puA || '', m.ecH || '', m.ecA || '', m.mvp || '',
     formatTime_(m.ts), m.edited ? 'Yes' : '', m.tournament || '',
-    membersCell_(m.homeMembers), membersCell_(m.awayMembers)
+    membersCell_(m.homeMembers), membersCell_(m.awayMembers),
+    m.forfeit || '', m.clockAdj || '', m.mercy ? 'Yes' : 'No'
   ];
 }
 
@@ -465,7 +480,8 @@ function rowToMatch_(r){
     htH: num_(r[25]), htA: num_(r[26]),
     puH: r[27], puA: r[28], ecH: r[29], ecA: r[30], mvp: r[31],
     edited: r[33] === 'Yes', tournament: r[34] || '',
-    homeMembers: splitMembers_(r[35]), awayMembers: splitMembers_(r[36])
+    homeMembers: splitMembers_(r[35]), awayMembers: splitMembers_(r[36]),
+    forfeit: r[37] || '', clockAdj: r[38] || '', mercy: r[39] === 'Yes'
   };
 }
 
